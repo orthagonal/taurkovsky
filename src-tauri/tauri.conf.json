@@ -66,11 +66,24 @@
         "label": "main",
         "fileDropEnabled": false,
         "fullscreen": false,
+        "width": 800,
         "height": 600,
         "resizable": true,
-        "title": "Simula Apocrypha",
-        "width": 800
+        "focus": true,
+        "alwaysOnTop": true,
+        "title": "Select Input/Output Frames"
+      },
+      {
+        "url": "preview.html",
+        "label": "preview",
+        "fullscreen": false,
+        "width": 1920,
+        "height": 1080,
+        "resizable": true,
+        "center": true,
+        "title": "Preview Video"
       }
+
     ]
   }
 }

@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "build": "esbuild index.jsx --bundle --outfile=../ui/index.js",
+    "build": "node esbuilder.js",
     "build-wasm": "webpack && cp ./dist/index.js ../ui",
     "serve" : "webpack serve"
   },

@@ -139,33 +139,6 @@ pub fn create_video_from_frames(source_dir: PathBuf, dest_dir: PathBuf, output_n
   format!("{}/{}", dest_dir.display(), output_name)
 }
 
-pub fn export_ghostidle(app_handle: &tauri::AppHandle, clips: Vec::<VideoClip>) {
-  for clip_one in clips.iter() {
-    for clip_two in clips.iter() {
-      if clip_one.path_to_start_frame == clip_two.path_to_start_frame {
-        continue;
-      }
-
-      // make a bridge to join the clip_two.path_to_end_frame to clip_one.path_to_start_frame
-      let path_to_frame_1 = Path::new(&clip_one.path_to_end_frame);
-      let path_to_frame_2 = Path::new(&clip_two.path_to_start_frame);
-      let frame_1 = &clip_one.path_to_start_frame;
-      let string_to_bridge_frames = format!("{}_{}", path_to_working_dir(&frame_1).display(), filename(&frame_1));
-      let path_to_bridge_frames = Path::new(&string_to_bridge_frames);//.to_path_buf();
-      let name = export_bridge(path_to_bridge_frames, path_to_frame_1, path_to_frame_2);
-
-      notify_video_ready(app_handle.clone(), name);
-
-      // make a bridge to join the clip_one.path_to_end_frame to clip_two.path_to_start_frame
-      let path_to_frame_1 = Path::new(&clip_two.path_to_end_frame);
-      let path_to_frame_2 = Path::new(&clip_one.path_to_start_frame);
-      let string_to_bridge_frames = format!("{}_{}", path_to_working_dir(&clip_one.path_to_start_frame).display(), filename(&frame_1));
-      let path_to_bridge_frames = Path::new(&string_to_bridge_frames);//.to_path_buf();
-      let name2 = export_bridge(path_to_bridge_frames, path_to_frame_1, path_to_frame_2);
-      notify_video_ready(app_handle.clone(), name2);
-    }
-  }
-}
 
 pub fn export_bridge(
   path_to_bridge_frames: &Path, 

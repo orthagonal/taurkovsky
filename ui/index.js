@@ -1045,15 +1045,6 @@
   }, currentMonitor: w2, primaryMonitor: M2, availableMonitors: W });
 
   // index.jsx
-  e("video_ready", (event) => {
-    alert("hello");
-    console.log("got video ready event", event);
-    console.log(event);
-    const video = document.getElementById("video");
-    video.src = c(event.video);
-    video.loop = true;
-    video.play();
-  });
   var makeAllWorkingDirs = async (sourcePath) => {
     const dir = await o6();
     const extension = await B(sourcePath);

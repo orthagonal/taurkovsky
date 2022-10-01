@@ -9,14 +9,6 @@ import { appDir, basename, join, extname } from '@tauri-apps/api/path';
 import { appWindow, WebviewWindow } from '@tauri-apps/api/window'
 
 
-listen('video_ready', (event) => {
-  console.log('got video ready event', event);
-  console.log(event);
-  const video = document.getElementById('video');
-  video.src = convertFileSrc(event.video);
-  video.loop = true;
-  video.play();
-});
 /// when a source video is first loaded, dir structure will be:
 /// - app root
 ///  - sourcevideoname (no extension)
