@@ -1,0 +1,59 @@
+/*
+contains the user event handlers and notifiers for the tauri app
+this is the main place that the jsx communicates with the rust code
+*/
+use std::sync::{Arc, Mutex};
+use tauri::Manager;
+use crate::generating_events::VideoClip;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ClickFramePayload {
+  pub path_to_frame: String,  // path to the frame that was clicked
+  pub is_start_frame: bool, // whether this is the start frame or end frame for the clip
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Emission {
+  recipient: String,
+  signal: String,
+  message: String,
+  error: String
+}
+
+pub fn notify_video_ready(app_handle: tauri::AppHandle, video_path: String) {
+  println!("notifying video ready");
+  let emission = Emission {
+    recipient: "video_ready".to_string(),
+    signal: "video_ready".to_string(),
+    message: video_path,
+    error: "".to_string()
+  };
+  print!("emission: {:?}", emission);
+  app_handle.emit_all("video_ready", emission).unwrap();
+}
+
+/*
+when user selects/deselects a frame, we 
+add it to the list of selected frames 
+TODO: and score it versus the other in/out frames
+and display the score
+*/
+
+// first time user clicks is the start frame, second time is the end frame
+pub fn set_clip(click_frame_payload: ClickFramePayload, video_clips_mutex: &Arc<Mutex<Vec<VideoClip>>>) {
+  if click_frame_payload.is_start_frame {
+    let clip = VideoClip {
+      path_to_start_frame: click_frame_payload.path_to_frame,
+      path_to_end_frame: "".to_string(),
+    };
+    let mut video_clips = video_clips_mutex.lock().unwrap();
+    println!("video is {:?}", video_clips);
+    video_clips.push(clip);
+  } else {
+    // just set the end frame on the last video clip
+    let mut video_clips = video_clips_mutex.lock().unwrap();
+    let mut video_clip = video_clips.last_mut().unwrap();
+    video_clip.path_to_end_frame = click_frame_payload.path_to_frame;
+    println!("video is {:?}", video_clips);
+  }
+}

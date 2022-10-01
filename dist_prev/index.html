@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+  <script>
+    // Be sure to set `build.withGlobalTauri` in `tauri.conf.json` to true
+    console.log(window.__TAURI__);
+    const listen = window.__TAURI__.event.listen;
+    const invoke = window.__TAURI__.invoke;
+  </script>
+
+  <body >
+    <form id="original-video">
+      <label for="original-video">Original Video</label>
+      <input type="file" id="original-video" name="original-video" accept="video/*">
+    </form>
+    <div id="video-frame-list">
+    </div>
+    <canvas id="finalDestinationCanvas" width="100vw" height="100vh">
+    </canvas>
+  </body>
+</html>

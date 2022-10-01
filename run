@@ -1,0 +1,4 @@
+cd websysplayer
+npm run build
+cd ..
+npm run tauri dev
