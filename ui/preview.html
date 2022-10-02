@@ -6,16 +6,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script defer src="preview.js"></script>
   <style>
-    #video-frame-list {
-      display: flex;
-      flex-direction: row;
-      flex-wrap: wrap;
-      justify-content: center;
-      overflow:scroll;
+    #videoContainer {
+      display:inline-block
     }
   </style>
 </head>
 <body>
-  <video id="video" width="1920" height="1080" autoplay></video>
+  <div id="videoContainer" >
+    <video id="videoA"></video>
+    <video id="videoB"></video>
+  </div>
 </body>
 </html>

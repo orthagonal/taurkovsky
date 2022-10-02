@@ -34,9 +34,14 @@ pub fn notify_video_ready(app_handle: tauri::AppHandle, video_path: String) {
 }
 
 // for each pair of clips, 
-    // make a bridge between the last frame of one and the first frame of two
-    // make a bridge back from last frame of two to first frame of one
-pub fn export_ghostidle(app_handle: &tauri::AppHandle, clips: Vec::<VideoClip>) {
+  // make a bridge between the last frame of one and the first frame of two
+  // make a bridge back from last frame of two to first frame of one
+  // don't re-process frames that have already been processed
+pub fn export_ghostidle(
+  app_handle: &tauri::AppHandle, 
+  clips: Vec::<VideoClip>, 
+  previous_reports: &mut std::collections::HashMap::<String, bool>
+) {
   for clip_one in clips.iter() {
     for clip_two in clips.iter() {
       // skip if it's the same one:
@@ -49,20 +54,24 @@ pub fn export_ghostidle(app_handle: &tauri::AppHandle, clips: Vec::<VideoClip>) 
       let path_to_frame_2 = Path::new(&clip_two.path_to_start_frame);
       let frame_1 = &clip_one.path_to_start_frame;
       let string_to_bridge_frames = format!("{}_{}", path_to_working_dir(&frame_1).display(), filename(&frame_1));
-      let path_to_bridge_frames = Path::new(&string_to_bridge_frames);//.to_path_buf();
-      let name = export_bridge(path_to_bridge_frames, path_to_frame_1, path_to_frame_2);
-      // sleep_ms(2000);
-      notify_video_ready(app_handle.clone(), name);
+      let path_to_bridge_frames = Path::new(&string_to_bridge_frames);
+      if !previous_reports.contains_key(&string_to_bridge_frames) {
+        let name = export_bridge(path_to_bridge_frames, path_to_frame_1, path_to_frame_2);
+        previous_reports.insert(string_to_bridge_frames, true);
+        notify_video_ready(app_handle.clone(), name);
+      }
 
       // make a bridge to join the clip_one.path_to_end_frame to clip_two.path_to_start_frame
       let path_to_frame_1 = Path::new(&clip_two.path_to_end_frame);
       let path_to_frame_2 = Path::new(&clip_one.path_to_start_frame);
       let frame_2 = &clip_two.path_to_start_frame;
-      let string_to_bridge_frames = format!("{}_{}", path_to_working_dir(&clip_one.path_to_start_frame).display(), filename(&frame_2));
-      let path_to_bridge_frames = Path::new(&string_to_bridge_frames);//.to_path_buf();
-      let name2 = export_bridge(path_to_bridge_frames, path_to_frame_1, path_to_frame_2);
-      // sleep_ms(2000);
-      notify_video_ready(app_handle.clone(), name2);
+      let string_to_bridge_frames2 = format!("{}_{}", path_to_working_dir(&frame_2).display(), filename(&frame_2));
+      let path_to_bridge_frames2 = Path::new(&string_to_bridge_frames2);
+      if !previous_reports.contains_key(&string_to_bridge_frames2) {
+        let name2 = export_bridge(path_to_bridge_frames2, path_to_frame_1, path_to_frame_2);
+        previous_reports.insert(string_to_bridge_frames2, true);
+        notify_video_ready(app_handle.clone(), name2);
+      }
     }
   }
 }

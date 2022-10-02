@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path};
 use std::env;
 use generating_events::*;
@@ -40,6 +41,8 @@ fn main() {
   .setup(|app| {
     let video_clips_vec = Vec::<VideoClip>::new();
     let idle_frames_mutex = Arc::new(Mutex::new(video_clips_vec));
+    let previous_exports = HashMap::<String, bool>::new();
+    let previous_exports_mutex = Arc::new(Mutex::new(previous_exports));
     let main_window = app.get_window("main").unwrap();
     // by design it's cheap to clone the app handle so we will just pass clones of it around
     // so that functions can call it from anywhere
@@ -49,10 +52,15 @@ fn main() {
       set_clip(click_frame_payload, &idle_frames_mutex);
       // if two or more start generating join frames
       let idle_frames  = idle_frames_mutex.lock().unwrap();
+      let previous_exports = previous_exports_mutex.lock().unwrap();
       let l = (*idle_frames).last().unwrap();
       // export if there's multiple complete clips selected:
       if (*idle_frames).len() > 1 && l.path_to_end_frame != "" {
-        export_ghostidle(&app_handle.clone(), (*idle_frames).clone());
+        export_ghostidle(
+          &app_handle.clone(), 
+        (*idle_frames).clone(), 
+        &mut (*previous_exports).clone()
+      );
         // todo: notify frontend when the vid is ready
         // might need to happen in the thread that's generating the video
       }
