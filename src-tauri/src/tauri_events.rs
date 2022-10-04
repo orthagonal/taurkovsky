@@ -4,7 +4,7 @@ this is the main place that the jsx communicates with the rust code
 */
 use std::{sync::{Arc, Mutex}, path::Path, thread::sleep_ms};
 use tauri::Manager;
-use crate::generating_events::{VideoClip, path_to_working_dir, filename, export_bridge};
+use crate::generating_events::{VideoClip, path_to_working_dir, filename, export_bridge, path_to_frames_dir, frame_diff, create_video_clip};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ClickFramePayload {
@@ -33,6 +33,8 @@ pub fn notify_video_ready(app_handle: tauri::AppHandle, video_path: String) {
   preview_window.emit("video-ready", emission).unwrap();
 }
 
+// for each clip:
+  // export that clip as a video
 // for each pair of clips, 
   // make a bridge between the last frame of one and the first frame of two
   // make a bridge back from last frame of two to first frame of one
@@ -42,6 +44,16 @@ pub fn export_ghostidle(
   clips: Vec::<VideoClip>, 
   previous_reports: &mut std::collections::HashMap::<String, bool>
 ) {
+  // export each clip in between as a video
+  for clip in clips.iter() {
+    let start_frame = filename(&clip.path_to_start_frame);
+    let end_frame = filename(&clip.path_to_end_frame);
+    let frames_dir = path_to_frames_dir(&clip.path_to_start_frame);
+    let output_dir = path_to_working_dir(&clip.path_to_start_frame);
+    let clip_info = frame_diff(&start_frame, &end_frame);
+    let new_file = create_video_clip(frames_dir, output_dir, clip_info);
+    // notify_video_ready(app_handle.clone(), new_file);
+  }
   for clip_one in clips.iter() {
     for clip_two in clips.iter() {
       // skip if it's the same one:
