@@ -707,35 +707,44 @@
   var a2 = Object.freeze({ __proto__: null, listen: e, once: u2, emit: s3 });
 
   // preview.jsx
-  var video = void 0;
+  var videoA = void 0;
+  var videoB = void 0;
   var started = false;
   var videoSources = [];
   var curVideoIndex = 0;
-  var addVideoSource = (videoElement, newSource) => {
-    if (!videoSources.includes(newSource)) {
-      videoSources.push(c(newSource));
-    }
-  };
-  var onVideoEnded = () => {
+  var nextVideo = (curVideo) => {
     curVideoIndex++;
-    console.log("video ended, switching to next video", curVideoIndex);
     if (curVideoIndex >= videoSources.length) {
       curVideoIndex = 0;
     }
-    video.src = videoSources[curVideoIndex];
-    console.log("set video src to", videoSources[curVideoIndex]);
-    console.log("video sources", videoSources);
-    video.play();
+    curVideo.src = videoSources[curVideoIndex];
   };
   m.listen("video-ready", (event) => {
-    addVideoSource(video, event.payload.message);
+    const newSource = event.payload.message;
+    if (!videoSources.includes(newSource)) {
+      videoSources.push(c(newSource));
+    }
     if (!started) {
       started = true;
-      video = document.getElementById("video");
-      console.log("starting video");
-      video.onended = onVideoEnded;
-      video.src = videoSources[0];
-      video.play();
+      videoA = document.getElementById("videoA");
+      videoB = document.getElementById("videoB");
+      videoB.style.display = "none";
+      videoA.style.display = "block";
+      videoA.onended = function(e2) {
+        videoB.play();
+        videoA.style.display = "none";
+        videoB.style.display = "block";
+        nextVideo(videoA);
+      };
+      videoB.onended = function(e2) {
+        videoA.play();
+        videoB.style.display = "none";
+        videoA.style.display = "block";
+        nextVideo(videoB);
+      };
+      videoA.src = videoSources[0];
+      nextVideo(videoB);
+      videoA.play();
     }
   });
 })();
