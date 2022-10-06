@@ -6,32 +6,51 @@ use std::{sync::{Arc, Mutex}, path::Path, thread::sleep_ms};
 use tauri::Manager;
 use crate::generating_events::{VideoClip, path_to_working_dir, filename, export_bridge, path_to_frames_dir, frame_diff, create_video_clip};
 
+// when the user clicks a frame of video in the main screen:
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ClickFramePayload {
   pub path_to_frame: String,  // path to the frame that was clicked
   pub is_start_frame: bool, // whether this is the start frame or end frame for the clip
 }
 
+// when the app updates the status of a processing item
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Emission {
-  recipient: String,
-  signal: String,
-  message: String,
+pub struct StatusUpdate {
+  label_of_item: String,
+  status_of_item: String,
+  progress_percent: i32,
+  alert_message: String,
   error: String
 }
 
-pub fn notify_video_ready(app_handle: tauri::AppHandle, video_path: String) {
-  println!("notifying video ready");
-  let emission = Emission {
-    recipient: "video_ready".to_string(),
-    signal: "video_ready".to_string(),
-    message: video_path,
-    error: "".to_string()
-  };
-  print!("emission: {:?}", emission);
-  let preview_window = app_handle.get_window("preview").unwrap();
-  preview_window.emit("video-ready", emission).unwrap();
+fn notify_clip_added(app_handle: tauri::AppHandle, clip_name: String) {
+  let destination_window = app_handle.get_window("control_panel".as_str()).unwrap();
+  destination_window.emit("add-clip", r#"{
+    "clip_name": ""#.to_string() + &clip_name + "\"
+  }").unwrap();
 }
+
+//////////////////////////////////////////////
+/// updates sent to the status_of_item panel 
+/// ////////////////////////////////////
+pub fn notify_status_update_(
+  app_handle: tauri::AppHandle, 
+  label_of_destination_window: String, 
+  label_of_item: String, 
+  status_of_item: String, 
+  progress_percent: i32, 
+  alert_message: String, 
+  error: String) {
+  let destination_window = app_handle.get_window(label_of_destination_window.as_str()).unwrap();
+  destination_window.emit("status-update", StatusUpdate {
+    label_of_item: label_of_item,
+    status_of_item: status_of_item,
+    progress_percent: progress_percent,
+    alert_message: alert_message,
+    error: error
+  }).unwrap();
+}
+
 
 // for each clip:
   // export that clip as a video
@@ -45,15 +64,15 @@ pub fn export_ghostidle(
   previous_reports: &mut std::collections::HashMap::<String, bool>
 ) {
   // export each clip in between as a video
-  for clip in clips.iter() {
-    let start_frame = filename(&clip.path_to_start_frame);
-    let end_frame = filename(&clip.path_to_end_frame);
-    let frames_dir = path_to_frames_dir(&clip.path_to_start_frame);
-    let output_dir = path_to_working_dir(&clip.path_to_start_frame);
-    let clip_info = frame_diff(&start_frame, &end_frame);
-    let new_file = create_video_clip(frames_dir, output_dir, clip_info);
-    // notify_video_ready(app_handle.clone(), new_file);
-  }
+  // for clip in clips.iter() {
+  //   let start_frame = filename(&clip.path_to_start_frame);
+  //   let end_frame = filename(&clip.path_to_end_frame);
+  //   let frames_dir = path_to_frames_dir(&clip.path_to_start_frame);
+  //   let output_dir = path_to_working_dir(&clip.path_to_start_frame);
+  //   let clip_info = frame_diff(&start_frame, &end_frame);
+  //   let new_file = create_video_clip(frames_dir, output_dir, clip_info);
+  //   // notify_video_ready(app_handle.clone(), new_file);
+  // }
   for clip_one in clips.iter() {
     for clip_two in clips.iter() {
       // skip if it's the same one:
@@ -68,9 +87,25 @@ pub fn export_ghostidle(
       let string_to_bridge_frames = format!("{}_{}", path_to_working_dir(&frame_1).display(), filename(&frame_1));
       let path_to_bridge_frames = Path::new(&string_to_bridge_frames);
       if !previous_reports.contains_key(&string_to_bridge_frames) {
-        let name = export_bridge(path_to_bridge_frames, path_to_frame_1, path_to_frame_2);
-        previous_reports.insert(string_to_bridge_frames, true);
-        notify_video_ready(app_handle.clone(), name);
+        notify_status_update_(app_handle.clone(), "control_panel".to_string(), string_to_bridge_frames.clone(), "generating bridge frames".to_string(), 0, "".to_string(), "".to_string());
+        // export_bridge(path_to_bridge_frames, path_to_frame_1, path_to_frame_2);
+        if !Path::exists(&path_to_bridge_frames) {
+          crate::generating_events::create_frames(
+            path_to_frame_1.to_path_buf(), 
+            path_to_frame_2.to_path_buf(),
+            path_to_bridge_frames.to_path_buf()
+          );
+        }
+        notify_status_update_(app_handle.clone(), "control_panel".to_string(), string_to_bridge_frames.clone(), "generating bridge video".to_string(), 100, "".to_string(), "".to_string());
+        let frame_1 = path_to_frame_1.to_str().unwrap();
+        let frame_2 = path_to_frame_2.to_str().unwrap();
+        crate::generating_events::create_video_from_frames(
+          path_to_bridge_frames.to_path_buf(),
+          crate::generating_events::path_to_bridge_video(frame_1),
+          format!("{}_{}.webm", filename(&frame_1), filename(&frame_2).as_str()).as_str()
+        );
+        notify_status_update_(app_handle.clone(), "control_panel".to_string(), string_to_bridge_frames.clone(), "bridge generated".to_string(), 100, "".to_string(), "".to_string());
+        previous_reports.insert(string_to_bridge_frames.clone(), true);
       }
 
       // make a bridge to join the clip_one.path_to_end_frame to clip_two.path_to_start_frame
@@ -80,9 +115,26 @@ pub fn export_ghostidle(
       let string_to_bridge_frames2 = format!("{}_{}", path_to_working_dir(&frame_2).display(), filename(&frame_2));
       let path_to_bridge_frames2 = Path::new(&string_to_bridge_frames2);
       if !previous_reports.contains_key(&string_to_bridge_frames2) {
-        let name2 = export_bridge(path_to_bridge_frames2, path_to_frame_1, path_to_frame_2);
-        previous_reports.insert(string_to_bridge_frames2, true);
-        notify_video_ready(app_handle.clone(), name2);
+        notify_status_update_(app_handle.clone(), "control_panel".to_string(), string_to_bridge_frames2.clone(), "generating bridge frames".to_string(), 0, "".to_string(), "".to_string());
+        if !Path::exists(&path_to_bridge_frames) {
+          crate::generating_events::create_frames(
+            path_to_frame_1.to_path_buf(), 
+            path_to_frame_2.to_path_buf(),
+            path_to_bridge_frames.to_path_buf()
+          );
+        }
+        // compile those frames to video:
+        notify_status_update_(app_handle.clone(), "control_panel".to_string(), string_to_bridge_frames2.clone(), "generating bridge video".to_string(), 100, "".to_string(), "".to_string());
+        let frame_1 = path_to_frame_1.to_str().unwrap();
+        let frame_2 = path_to_frame_2.to_str().unwrap();
+        crate::generating_events::create_video_from_frames(
+          path_to_bridge_frames.to_path_buf(),
+          crate::generating_events::path_to_bridge_video(frame_1),
+          format!("{}_{}.webm", filename(&frame_1), filename(&frame_2).as_str()).as_str()
+        );
+        // export_bridge(path_to_bridge_frames2, path_to_frame_1, path_to_frame_2);
+        previous_reports.insert(string_to_bridge_frames2.clone(), true);
+        notify_status_update_(app_handle.clone(), "control_panel".to_string(), string_to_bridge_frames2, "bridge generated".to_string(), 100, "".to_string(), "".to_string());
       }
     }
   }
@@ -96,7 +148,7 @@ and display the score
 */
 
 // first time user clicks is the start frame, second time is the end frame
-pub fn set_clip(click_frame_payload: ClickFramePayload, video_clips_mutex: &Arc<Mutex<Vec<VideoClip>>>) {
+pub fn set_clip(app_handle: tauri::AppHandle, click_frame_payload: ClickFramePayload, video_clips_mutex: &Arc<Mutex<Vec<VideoClip>>>) {
   if click_frame_payload.is_start_frame {
     let clip = VideoClip {
       path_to_start_frame: click_frame_payload.path_to_frame,
@@ -109,7 +161,9 @@ pub fn set_clip(click_frame_payload: ClickFramePayload, video_clips_mutex: &Arc<
     // just set the end frame on the last video clip
     let mut video_clips = video_clips_mutex.lock().unwrap();
     let mut video_clip = video_clips.last_mut().unwrap();
+    // notify control_panel there's a new clip
     video_clip.path_to_end_frame = click_frame_payload.path_to_frame;
-    println!("video is {:?}", video_clips);
+    notify_clip_added(app_handle.clone(), click_frame_payload.path_to_frame.clone());
   }
 }
+

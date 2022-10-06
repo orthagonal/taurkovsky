@@ -23,12 +23,10 @@ fn framify_video_src(src_video_name: &str) {
   println!("src video path is {}", src_video_name);
   // we should already be in this videos' working dir
   let frames_dir = env::current_dir().unwrap().join("frames");
-  if Path::exists(&frames_dir) {
-    println!("frames dir already exists");
-  } else {
-    // framify it in another thread
-    generate_frames_from_video(src_video_name.to_string(), frames_dir);
-  }
+  let thumbs_dir = env::current_dir().unwrap().join("thumbs");
+  // framify it in another thread
+  generate_frames_from_video(src_video_name.to_string(), frames_dir);
+  generate_thumbs_from_video(src_video_name.to_string(), thumbs_dir);
 }
 
 pub fn notify() {
@@ -49,7 +47,17 @@ fn main() {
     let app_handle = app.handle();
     let id = main_window.listen("click", move|event| {
       let click_frame_payload: ClickFramePayload = serde_json::from_str(event.payload().unwrap()).unwrap();
-      set_clip(click_frame_payload, &idle_frames_mutex);
+      notify_status_update_(
+        app_handle.clone(),
+        "control_panel".to_string(),
+        click_frame_payload.path_to_frame.clone(),
+        "frame clicked".to_string(),
+        50,
+        "alert message from rust".to_string(),
+        "".to_string()
+      );
+
+      set_clip(app_handle.clone(), click_frame_payload, &idle_frames_mutex);
       // if two or more start generating join frames
       let idle_frames  = idle_frames_mutex.lock().unwrap();
       let previous_exports = previous_exports_mutex.lock().unwrap();

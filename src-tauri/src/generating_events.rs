@@ -9,7 +9,6 @@ use std::{
 // used to call ffmpeg and RIFE etc
 use std::process::Command;
 use std::thread;
-use crate::tauri_events::notify_video_ready;
 
 /* some directory helpers */
 pub fn path_to_working_dir(source_video_name: &str) -> PathBuf {
@@ -69,6 +68,37 @@ pub fn generate_frames_from_video(new_video_source: String, dest_dir: PathBuf) {
     .arg("-hide_banner")
     .output().unwrap();
     println!("generate_frames_from_video result is {}", String::from_utf8(command.stdout).unwrap());
+  });
+}
+
+// just calls out to ffmpeg to turn the video into frames
+pub fn generate_thumbs_from_video(new_video_source: String, dest_dir: PathBuf) {
+  // just use command to call ffmpeg executable (the time-consuming part occurs inside ffmpeg)
+  let ffmpeg_cmd = match env::var("FFMPEG_CMD") {
+    Ok(val) => val,
+    Err(e) => panic!("FFMPEG_CMD not set! {}", e),
+  };
+  let ffmpeg_dir = match env::var("FFMPEG_DIR") {
+    Ok(val) => val,
+    Err(e) => panic!("FFMPEG_DIR not set! {}", e),
+  };
+  println!("src is {}", new_video_source);
+  println!("ffmpeg cmd is {} in dir {}", ffmpeg_cmd, ffmpeg_dir);
+  println!("printing to dir {}", dest_dir.to_str().unwrap());
+
+  thread::spawn(move || {
+    let command = Command::new("cmd")
+    .current_dir(ffmpeg_dir)
+    .arg("/C")
+    .arg(ffmpeg_cmd)
+    .arg("-i")
+    .arg(new_video_source)
+    .arg("-vf")
+    .arg("scale=320:240")
+    .arg(format!("{}/frame_%4d.png", dest_dir.display()))
+    .arg("-hide_banner")
+    .output().unwrap();
+    println!("generate_thumbs_from_video result is {}", String::from_utf8(command.stdout).unwrap());
   });
 }
 

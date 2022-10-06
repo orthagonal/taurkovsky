@@ -1,6 +1,10 @@
 import { invoke, convertFileSrc } from '@tauri-apps/api/tauri';
 import { appWindow, WebviewWindow } from '@tauri-apps/api/window'
 import { listen , emit } from '@tauri-apps/api/event';
+import { sequenceLinear } from './seq.jsx';
+
+// todo: enforce getNextVideo
+// todo: allow switch between morph mode, ghostidle mode, transition mode
 
 // we'll alternate between these two <video> elements
 // to prevent flicker
@@ -8,21 +12,18 @@ let videoA = undefined;
 let videoB = undefined;
 let started = false;
 const videoSources = [];
-let curVideoIndex = 0;
 
-// infinitely loop through the videoSources
 const nextVideo = (curVideo) => {
-  curVideoIndex++;
-  if (curVideoIndex >= videoSources.length) {
-    curVideoIndex = 0;
-  }
-  curVideo.src = videoSources[curVideoIndex];
+// infinitely loop through the videoSources
+  curVideo.src = sequenceLinear(videoSources);
 };
 
 // called from tauri when it finishes exproting a new webm seq
-appWindow.listen('video-ready', (event) => {
+appWindow.listen('status-update', (event) => {
+// this may grow to listen to more types right now it just assumes label_of_item
+// means the video is ready to play
+  const newSource = event.payload.label_of_item;
   // only add it once:
-  const newSource = event.payload.message;
   if (!videoSources.includes(newSource)) {
     videoSources.push(convertFileSrc(newSource));
   }
@@ -35,9 +36,12 @@ appWindow.listen('video-ready', (event) => {
     videoA.style.display = "block";
     // alternate between videoA and videoB, hiding whichever isn't playing
     videoA.onended = function(e) {
+      console.time();
       videoB.play();
+      console.timeLog();
       videoA.style.display = "none";
       videoB.style.display = "block";
+      console.timeLog();
       nextVideo(videoA);
     };
     videoB.onended = function(e) {
@@ -52,3 +56,4 @@ appWindow.listen('video-ready', (event) => {
     videoA.play();
   }
 });
+

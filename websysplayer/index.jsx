@@ -1,6 +1,3 @@
-// Note that a dynamic `import` statement here is required due to
-// webpack/webpack#6615, but in theory `import { greet } from './pkg';`
-// will work here one day as well!
 import { listen , emit } from '@tauri-apps/api/event';
 import { invoke, convertFileSrc } from '@tauri-apps/api/tauri';
 import { open } from '@tauri-apps/api/dialog';
@@ -22,6 +19,7 @@ const makeAllWorkingDirs = async (sourcePath) => {
   const workingDir = await join(dir, fileStemName);
   await createDir(workingDir, { recursive: true });
   await createDir(await join (workingDir, 'frames'), { recursive: true });
+  await createDir(await join (workingDir, 'thumbs'), { recursive: true });
   await createDir(await join (workingDir, 'bridge_frames'), { recursive: true });
   await createDir(await join (workingDir, 'bridge_video'), { recursive: true });
   invoke('set_working_dir', {
@@ -31,21 +29,30 @@ const makeAllWorkingDirs = async (sourcePath) => {
 };
 
 // display the frames of the source video
-const displayFrameDir = async (sourcePath) => {
-  console.log('displayFrameDir', sourcePath);
+const displayThumbsDir = async (sourcePath) => {
+  console.log('displayThumbsDir', sourcePath);
   let isStartFrame = true;
   const frameEntries = await readDir(sourcePath);
   console.log('frameEntries', frameEntries);
+  // keep watching until something appears, good enough for now
+  // the 'right' way to do this is probably use a watcher in rust then signal here when ready
+  if (frameEntries.length === 0) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    return displayThumbsDir(sourcePath);
+  }
   const videoFrameList = document.getElementById('video-frame-list');
   for (let i = 0; i < frameEntries.length; i++) {
     const frameEntry = frameEntries[i];
-    const frameEl = document.createElement('img');
-    frameEl.src = await convertFileSrc(frameEntry.path);
-    frameEl.realPath = frameEntry.path;
-    frameEl.class = "video-frame";
-    frameEl.width = 35;
-    frameEl.height = 35;
-    frameEl.style.margin = '10px';
+    const frameEl = document.createElement('div');
+    frameEl.innerHTML = `<span class="text-xs font-bold text-slate-200">${i}</span>
+      <img 
+        src=${convertFileSrc(await join(sourcePath, frameEntry.name))} 
+        class="video-frame m-1"
+        width="35"
+        height="35"
+      />`;
+    frameEl.realPath = frameEntry.path.replace('thumbs', 'frames'); // the corresponding full-size frame is in the frames directory
+    console.log('frameEl', frameEl);
     frameEl.addEventListener('click', (event) => {
       // todo: colorize the frame if it's start frame
       // colorize the first+last frame and every frame in between
@@ -54,18 +61,7 @@ const displayFrameDir = async (sourcePath) => {
         is_start_frame: isStartFrame
       });
       isStartFrame = !isStartFrame;
-      // todo: add the frame to the list of frames used,
-      // add a dot to the graph of the ghostidle, etc
-      // attempt to use as a tauri command but didn't allow access to the mutexed Vec<VideoClip>
-      // const result = await invoke('click_frame', {
-      //   path_to_frame: frameEl.realPath,
-      //   is_start_frame
-      // });
-      // is_start_frame = !is_start_frame;
-
-
     });
-
     videoFrameList.appendChild(frameEl);
   }
 };
@@ -89,7 +85,7 @@ const f = async () => {
       srcVideoName: selected
     });
     // display the frames:
-    await displayFrameDir(await join(workingDir, 'frames'));
+    await displayThumbsDir(await join(workingDir, 'thumbs'));
   }
 };
 f();

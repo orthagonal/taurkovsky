@@ -70,7 +70,7 @@
         "height": 600,
         "resizable": true,
         "focus": true,
-        "alwaysOnTop": true,
+        "alwaysOnTop": false,
         "title": "Select Input/Output Frames"
       },
       {
@@ -82,8 +82,18 @@
         "resizable": true,
         "center": true,
         "title": "Preview Video"
+      },
+      {
+        "url": "control_panel.html",
+        "label": "control_panel",
+        "fullscreen": false,
+        "width": 800,
+        "height": 600,
+        "resizable": true,
+        "center": true,
+        "alwaysOnTop": true,
+        "title": "Control Panel"
       }
-
     ]
   }
 }
