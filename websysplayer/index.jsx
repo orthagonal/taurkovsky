@@ -52,11 +52,13 @@ const displayThumbsDir = async (sourcePath) => {
         height="35"
       />`;
     frameEl.realPath = frameEntry.path.replace('thumbs', 'frames'); // the corresponding full-size frame is in the frames directory
+    frameEl.frameIndex = i;
     console.log('frameEl', frameEl);
     frameEl.addEventListener('click', (event) => {
       // todo: colorize the frame if it's start frame
       // colorize the first+last frame and every frame in between
       appWindow.emit('click', {
+        index_of_frame: frameEl.frameIndex,
         path_to_frame: frameEl.realPath,
         is_start_frame: isStartFrame
       });

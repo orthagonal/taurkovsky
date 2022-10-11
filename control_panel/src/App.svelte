@@ -5,9 +5,10 @@
   import { listen , emit } from '@tauri-apps/api/event';
   import { onMount } from 'svelte';
 
-  let statusList = {};
-  let clipList = {};
-  let BridgeList = {};
+  let statusList = {}; // List of all the status of the different services
+  let clipList = {}; // index of start frame -> VideoClip object
+  let bridges = {}; // index of origin frame -> VideoBridge object
+  
   const updateStatus = (payload) => {
     statusList[payload.label_of_item] = payload;
   };
@@ -34,15 +35,17 @@
 <style></style>
 
 <main>
-  <h2> Clip List</h2>
+  <h2> Status Panel </h2>
+  List of selected clips    
   <ul class="border-2">
     {#each Object.values(clipList) as clip}
-    <li>{clip}</li>
+    <li>first_frame -> last_frame or not selected </li>
     {/each}
   </ul>
+  List of auto-generated joins or bridges between those clips:
   <ul class="border-2">
-    {#each Object.values(statusList) as status}
-      <li>{status.label_of_item} - {status.status_of_item}</li>
+    {#each Object.values(clipList) as start_clip}
+      get the bridges that start at this clip
     {/each}
   </ul>
 </main>

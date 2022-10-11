@@ -20,6 +20,7 @@ serde = { version = "1.0", features = ["derive"] }
 tauri = { version = "1.0.5", features = ["api-all"] }
 notify = "5.0.0"
 futures = "0.3.17"
+graphlib = { version = "0.6.3" }
 
 [features]
 # by default Tauri runs in production mode

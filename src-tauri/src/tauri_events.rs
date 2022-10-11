@@ -2,15 +2,23 @@
 contains the user event handlers and notifiers for the tauri app
 this is the main place that the jsx communicates with the rust code
 */
-use std::{sync::{Arc, Mutex}, path::Path, thread::sleep_ms};
+use std::{sync::{Arc, Mutex}, path::Path};
 use tauri::Manager;
-use crate::generating_events::{VideoClip, path_to_working_dir, filename, export_bridge, path_to_frames_dir, frame_diff, create_video_clip};
+use crate::{ghostidle::{VideoClip, VideoBridge}, generating_events::working_dir_string};
+use crate::generating_events::{working_dir_path, filename};
 
 // when the user clicks a frame of video in the main screen:
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ClickFramePayload {
+  pub index_of_frame: i32, // index of the frame in the sequence of frames in the video
   pub path_to_frame: String,  // path to the frame that was clicked
   pub is_start_frame: bool, // whether this is the start frame or end frame for the clip
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GhostIdlePayload {
+  pub clips: Vec<VideoClip>,
+  pub bridges: Vec<VideoBridge>,
 }
 
 // when the app updates the status of a processing item
@@ -24,7 +32,7 @@ pub struct StatusUpdate {
 }
 
 fn notify_clip_added(app_handle: tauri::AppHandle, clip_name: String) {
-  let destination_window = app_handle.get_window("control_panel".as_str()).unwrap();
+  let destination_window = app_handle.get_window("control_panel").unwrap();
   destination_window.emit("add-clip", r#"{
     "clip_name": ""#.to_string() + &clip_name + "\"
   }").unwrap();
@@ -66,9 +74,9 @@ pub fn export_ghostidle(
   // export each clip in between as a video
   // for clip in clips.iter() {
   //   let start_frame = filename(&clip.path_to_start_frame);
-  //   let end_frame = filename(&clip.path_to_end_frame);
+  //   let end_frame = filename(&clip.path_to_final_frame);
   //   let frames_dir = path_to_frames_dir(&clip.path_to_start_frame);
-  //   let output_dir = path_to_working_dir(&clip.path_to_start_frame);
+  //   let output_dir = working_dir_path(&clip.path_to_start_frame);
   //   let clip_info = frame_diff(&start_frame, &end_frame);
   //   let new_file = create_video_clip(frames_dir, output_dir, clip_info);
   //   // notify_video_ready(app_handle.clone(), new_file);
@@ -80,11 +88,11 @@ pub fn export_ghostidle(
         continue;
       }
 
-      // make a bridge to join the clip_two.path_to_end_frame to clip_one.path_to_start_frame
-      let path_to_frame_1 = Path::new(&clip_one.path_to_end_frame);
+      // make a bridge to join the clip_two.path_to_final_frame to clip_one.path_to_start_frame
+      let path_to_frame_1 = Path::new(&clip_one.path_to_final_frame);
       let path_to_frame_2 = Path::new(&clip_two.path_to_start_frame);
       let frame_1 = &clip_one.path_to_start_frame;
-      let string_to_bridge_frames = format!("{}_{}", path_to_working_dir(&frame_1).display(), filename(&frame_1));
+      let string_to_bridge_frames = format!("{}_{}", working_dir_string(&frame_1), filename(&frame_1));
       let path_to_bridge_frames = Path::new(&string_to_bridge_frames);
       if !previous_reports.contains_key(&string_to_bridge_frames) {
         notify_status_update_(app_handle.clone(), "control_panel".to_string(), string_to_bridge_frames.clone(), "generating bridge frames".to_string(), 0, "".to_string(), "".to_string());
@@ -101,18 +109,18 @@ pub fn export_ghostidle(
         let frame_2 = path_to_frame_2.to_str().unwrap();
         crate::generating_events::create_video_from_frames(
           path_to_bridge_frames.to_path_buf(),
-          crate::generating_events::path_to_bridge_video(frame_1),
+          crate::generating_events::bridge_video_path(frame_1),
           format!("{}_{}.webm", filename(&frame_1), filename(&frame_2).as_str()).as_str()
         );
         notify_status_update_(app_handle.clone(), "control_panel".to_string(), string_to_bridge_frames.clone(), "bridge generated".to_string(), 100, "".to_string(), "".to_string());
         previous_reports.insert(string_to_bridge_frames.clone(), true);
       }
 
-      // make a bridge to join the clip_one.path_to_end_frame to clip_two.path_to_start_frame
-      let path_to_frame_1 = Path::new(&clip_two.path_to_end_frame);
+      // make a bridge to join the clip_one.path_to_final_frame to clip_two.path_to_start_frame
+      let path_to_frame_1 = Path::new(&clip_two.path_to_final_frame);
       let path_to_frame_2 = Path::new(&clip_one.path_to_start_frame);
       let frame_2 = &clip_two.path_to_start_frame;
-      let string_to_bridge_frames2 = format!("{}_{}", path_to_working_dir(&frame_2).display(), filename(&frame_2));
+      let string_to_bridge_frames2 = format!("{}_{}", working_dir_string(&frame_2), filename(&frame_2));
       let path_to_bridge_frames2 = Path::new(&string_to_bridge_frames2);
       if !previous_reports.contains_key(&string_to_bridge_frames2) {
         notify_status_update_(app_handle.clone(), "control_panel".to_string(), string_to_bridge_frames2.clone(), "generating bridge frames".to_string(), 0, "".to_string(), "".to_string());
@@ -129,7 +137,7 @@ pub fn export_ghostidle(
         let frame_2 = path_to_frame_2.to_str().unwrap();
         crate::generating_events::create_video_from_frames(
           path_to_bridge_frames.to_path_buf(),
-          crate::generating_events::path_to_bridge_video(frame_1),
+          crate::generating_events::bridge_video_path(frame_1),
           format!("{}_{}.webm", filename(&frame_1), filename(&frame_2).as_str()).as_str()
         );
         // export_bridge(path_to_bridge_frames2, path_to_frame_1, path_to_frame_2);
@@ -149,21 +157,24 @@ and display the score
 
 // first time user clicks is the start frame, second time is the end frame
 pub fn set_clip(app_handle: tauri::AppHandle, click_frame_payload: ClickFramePayload, video_clips_mutex: &Arc<Mutex<Vec<VideoClip>>>) {
-  if click_frame_payload.is_start_frame {
-    let clip = VideoClip {
-      path_to_start_frame: click_frame_payload.path_to_frame,
-      path_to_end_frame: "".to_string(),
-    };
-    let mut video_clips = video_clips_mutex.lock().unwrap();
-    println!("video is {:?}", video_clips);
-    video_clips.push(clip);
-  } else {
-    // just set the end frame on the last video clip
-    let mut video_clips = video_clips_mutex.lock().unwrap();
-    let mut video_clip = video_clips.last_mut().unwrap();
-    // notify control_panel there's a new clip
-    video_clip.path_to_end_frame = click_frame_payload.path_to_frame;
-    notify_clip_added(app_handle.clone(), click_frame_payload.path_to_frame.clone());
-  }
+  // if click_frame_payload.is_start_frame {
+  //   let clip = VideoClip {
+  //     path_to_start_frame: click_frame_payload.path_to_frame,
+  //     path_to_final_frame: "".to_string(),
+  //       index_of_start_frame: todo!(),
+  //       index_of_final_frame: todo!(),
+  //       path_to_generated_video: todo!(),
+  //   };
+  //   let mut video_clips = video_clips_mutex.lock().unwrap();
+  //   println!("video is {:?}", video_clips);
+  //   video_clips.push(clip);
+  // } else {
+  //   // just set the end frame on the last video clip
+  //   let mut video_clips = video_clips_mutex.lock().unwrap();
+  //   let mut video_clip = video_clips.last_mut().unwrap();
+  //   // notify control_panel there's a new clip
+  //   video_clip.path_to_final_frame = click_frame_payload.path_to_frame;
+  //   notify_clip_added(app_handle.clone(), click_frame_payload.path_to_frame.clone());
+  // }
 }
 
