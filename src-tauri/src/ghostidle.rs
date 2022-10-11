@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, cell::RefCell, process::Command};
+use std::{collections::HashMap, rc::Rc, cell::RefCell, process::Command, path::Path};
 use serde::{Serialize, Deserialize};
 use tauri::Manager;
 use crate::generating_events::{bridge_video_string, bridge_frames_path, filename, working_dir_path, working_dir_string, bridge_video_path, bridge_frames_string, frames_dir_string};
@@ -103,14 +103,76 @@ pub struct VideoBridge {
 
 impl VideoBridge {
   pub fn new(origin_clip: VideoClip, destination_clip: VideoClip) -> VideoBridge {
-    let path_to_generated_frames = bridge_frames_string(&origin_clip.path_to_start_frame.clone());
-    let path_to_generated_video = bridge_video_string(&origin_clip.path_to_start_frame.clone());
+    // rectification of the names:
+    let origin_frame_index = origin_clip.index_of_final_frame;
+    let destination_frame_index = destination_clip.index_of_start_frame;
+    let bridgeName = format!("{}to{}", origin_frame_index, destination_frame_index);
+    let videoName = format!("{}.webm", bridgeName);
+    let path_to_generated_frames = bridge_frames_path(&origin_clip.path_to_start_frame.clone()).join(bridgeName.clone()).to_str().unwrap().to_string();
+    let path_to_generated_video = working_dir_path(&origin_clip.path_to_start_frame.clone()).join(videoName).to_str().unwrap().to_string();
     VideoBridge {
-      destination_clip: destination_clip,
       origin_clip: origin_clip,
+      destination_clip: destination_clip,
       path_to_generated_frames,
-      path_to_generated_video
+      path_to_generated_video 
     }
+  }
+
+  // use your system to generate tween frames or use RIFE by default
+  pub fn generate_frames(&self) {
+    // TODO: all this needs to be generalized and configurable for others to use
+    // `python3 inference_img.py --exp 4 --img ${originClip} ${dstClip} --folderout ${pathToTweenFrames}`,
+    let system_root = std::env::var("SYSTEMROOT").unwrap(); 
+    let cmd_string = Path::new(&system_root).join(r#"/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"#);
+    let command = Command::new(cmd_string)
+      .current_dir("c:\\GitHub\\rife\\rife")
+      .arg("-c")
+      .arg("python3")
+      .arg("inference_img.py")
+      .arg("--exp 4")
+      .arg("--img")
+      .arg(self.origin_clip.path_to_start_frame.clone())
+      .arg(self.destination_clip.path_to_final_frame.clone())
+      .arg(format!("--folderout {} ", self.path_to_generated_frames))
+      .output().unwrap();
+    println!("{}", String::from_utf8(command.stdout).unwrap());
+    println!("{}", String::from_utf8(command.stderr).unwrap());
+    println!("generated frames in {}", self.path_to_generated_frames);
+  }
+  
+  pub fn export(&self, dest_dir: &str, app_handle_option: Option<&tauri::AppHandle>) {
+    println!("path to bridge frames is {}", self.path_to_generated_frames);
+    // system assumes you don't have identically named frames in different folders
+    // so always skip re-creating bridge frames:
+    if !Path::exists(Path::new(&self.path_to_generated_frames)) {
+      self.generate_frames();
+    }
+    // ffmpeg  -start_number 1 -i frame_0004/frames/frame_%04d.png -c:v vp8 -format rgba -vframes 150 frame_0004/4thru99.webm -hide_banner
+    let command = Command::new("cmd")
+      .current_dir(std::path::PathBuf::from("C:/ffmpeg"))
+      .arg("/C")
+      .arg("ffmpeg.exe")
+      .arg("-i")
+      .arg(format!("{}\\img%0d.png", self.path_to_generated_frames))
+      .arg("-c:v")
+      .arg("vp8")
+      .arg("-format")
+      .arg("rgba")
+      // force CBR
+      .arg("-minrate")
+      .arg("5200k")
+      .arg("-maxrate")
+      .arg("5200k")
+      .arg("-b:v")
+      .arg("5200k")
+      // .arg("alpha_mode=\"1\"")
+      .arg(self.path_to_generated_video.clone())
+      .arg("-hide_banner")
+      .output()
+      .unwrap(); // executes command in sync
+    println!("status: {}", command.status);
+    println!("stdout: {}", String::from_utf8_lossy(&command.stdout));
+    println!("stderr: {}", String::from_utf8_lossy(&command.stderr));
   }
 }
 

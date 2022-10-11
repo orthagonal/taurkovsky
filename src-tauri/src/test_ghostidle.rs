@@ -6,6 +6,11 @@
   use crate::ghostidle::GhostIdle;
   use crate::{tauri_events::ClickFramePayload, ghostidle::{VideoClip, VideoBridge}};
 
+  fn framename(filename: &str) -> String {
+    let path_to_frames = "C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\frames";
+    format!("{}\\{}", path_to_frames, filename)
+  }
+
 
   // #[test]
   // fn create_a_new_video_clip() {
@@ -24,28 +29,35 @@
   //   assert_eq!(clip.video_clip_name, "4thru25".to_string());
   // }
 
-  #[test]
-  fn export_a_video_clip() {
-    fn framename(filename: &str) -> String {
-      let path_to_frames = "C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\frames";
-      format!("{}\\{}", path_to_frames, filename)
-    }
+  // TODO: make this async and callback to app_handle when done
+  // #[test]
+  // fn export_a_video_clip() {
+  //   let mut clip = VideoClip::new(4, framename("frame_0004.png"), -1, "".to_string());
+  //   clip.add_last_frame(199, framename("frame_0199.png"));
+  //   clip.export("C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\", None);
+  // }
 
-    let mut clip = VideoClip::new(4, framename("frame_0004.png"), -1, "".to_string());
-    clip.add_last_frame(199, framename("frame_0199.png"));
-    clip.export("C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\", None);
-  }
 
-  /*
+  // #[test]
+  // fn create_a_new_video_bridge() {
+  //   let clipA = VideoClip::new(4, "frame_0004.png".to_string(), 22, "frame_0022.png".to_string());
+  //   let clipB = VideoClip::new(44, "frame_0044.png".to_string(), 67, "frame_0067.png".to_string());
+  //   let bridge = VideoBridge::new(clipA, clipB);
+  //   assert_eq!(bridge.origin_clip.index_of_start_frame, 4);
+  //   assert_eq!(bridge.destination_clip.index_of_final_frame, 67);
+  // }
+
   #[test]
-  fn create_a_new_video_bridge() {
-    let clipA = VideoClip::new(4, "frame_0004.png".to_string(), 22, "frame_0022.png".to_string());
-    let clipB = VideoClip::new(44, "frame_0044.png".to_string(), 67, "frame_0067.png".to_string());
+  fn export_a_video_bridge() {
+    let clipA = VideoClip::new(4, framename("frame_0004.png"), 22, framename("frame_0022.png"));
+    let clipB = VideoClip::new(274, framename("frame_0274.png"), 280, framename("frame_0280.png"));
     let bridge = VideoBridge::new(clipA, clipB);
-    assert_eq!(bridge.origin_clip.index_of_start_frame, 4);
-    assert_eq!(bridge.destination_clip.index_of_final_frame, 67);
+    bridge.export("C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\", None);
   }
 
+
+  
+  /*
   #[test]
   fn create_a_new_ghostidle() {
     let ghostidle = GhostIdle::new();

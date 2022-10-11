@@ -134,6 +134,67 @@ pub fn create_frames(source_frame_path: PathBuf, dest_frame_path: PathBuf, dest_
 /*
   uses ffmpeg to stitch together the frames into a video
 */
+
+#[derive(Debug)]
+pub struct ClipInfo {
+  start_frame: i32,
+  end_frame: i32,
+  frame_count: i32
+}
+
+// return distance between two ffmpeg-generated frame_000x.png files and subtract:
+pub fn frame_diff(start_frame: &str, end_frame: &str) -> ClipInfo {
+  let mut clip_info = ClipInfo {
+    start_frame: std::str::FromStr::from_str(start_frame
+      .split(".").nth(0).unwrap()   
+      .split("_").last().unwrap()).unwrap(),
+    end_frame: std::str::FromStr::from_str(end_frame
+      .split(".").nth(0).unwrap()   
+      .split("_").last().unwrap()).unwrap(),
+    frame_count: 0
+  };
+  clip_info.frame_count = clip_info.end_frame - clip_info.start_frame;
+  clip_info
+}
+
+pub fn create_video_clip(source_dir: PathBuf, dest_dir: PathBuf, clip_info: ClipInfo) -> String {
+  std::fs::create_dir_all(Path::new(&dest_dir)).unwrap();
+  println!("running command now");
+  let output_name = format!("clip_{}_{}.webm", clip_info.start_frame, clip_info.end_frame);
+  // TODO: FORCE SIZE TO BE 1080X1920
+  // -framerate 25 -f image2 -i frame_%0d.png -c:v libvpx -format rgba output.webm
+  let command = Command::new("cmd")
+    .current_dir("C:/ffmpeg")
+    .arg("/C")
+    .arg("ffmpeg.exe")
+    .arg("-framerate")
+    .arg("23.976")
+    .arg("-f")
+    .arg("image2")
+    .arg("-i")
+    .arg(format!("{}/img%0d.png", source_dir.display()))
+    .arg("-c:v")
+    .arg("vp8")
+    .arg("-format")
+    .arg("rgba")
+    .arg("-minrate")
+    .arg("5200k")
+    .arg("-maxrate")
+    .arg("5200k")
+    .arg("-b:v")
+    .arg("5200k")
+    // .arg("alpha_mode=\"1\"")
+    .arg(format!("{}/{}", dest_dir.display(), output_name))
+    .arg("-hide_banner")
+    .output();
+  let result = match command {
+    Ok(val) => val,
+    Err(e) => panic!("error running ffmpeg: {}", e),
+  };
+
+  return "Hi there".to_string()
+}
+
 pub fn create_video_from_frames(source_dir: PathBuf, dest_dir: PathBuf, output_name: &str) -> String {
   println!(">> source_dir: {}", source_dir.display());
   println!(">> dest_dir: {}", dest_dir.display());
@@ -176,70 +237,9 @@ pub fn create_video_from_frames(source_dir: PathBuf, dest_dir: PathBuf, output_n
   format!("{}/{}", dest_dir.display(), output_name)
 }
 
-#[derive(Debug)]
-pub struct ClipInfo {
-  start_frame: i32,
-  end_frame: i32,
-  frame_count: i32
-}
-
-// return distance between two ffmpeg-generated frame_000x.png files and subtract:
-pub fn frame_diff(start_frame: &str, end_frame: &str) -> ClipInfo {
-  let mut clip_info = ClipInfo {
-    start_frame: std::str::FromStr::from_str(start_frame
-      .split(".").nth(0).unwrap()   
-      .split("_").last().unwrap()).unwrap(),
-    end_frame: std::str::FromStr::from_str(end_frame
-      .split(".").nth(0).unwrap()   
-      .split("_").last().unwrap()).unwrap(),
-    frame_count: 0
-  };
-  clip_info.frame_count = clip_info.end_frame - clip_info.start_frame;
-  clip_info
-}
-
-pub fn create_video_clip(source_dir: PathBuf, dest_dir: PathBuf, clip_info: ClipInfo) -> String {
-
-
-  std::fs::create_dir_all(Path::new(&dest_dir)).unwrap();
-  println!("running command now");
-  let output_name = format!("clip_{}_{}.webm", clip_info.start_frame, clip_info.end_frame);
-  // TODO: FORCE SIZE TO BE 1080X1920
-  // -framerate 25 -f image2 -i frame_%0d.png -c:v libvpx -format rgba output.webm
-  let command = Command::new("cmd")
-    .current_dir("C:/ffmpeg")
-    .arg("/C")
-    .arg("ffmpeg.exe")
-    .arg("-framerate")
-    .arg("23.976")
-    .arg("-f")
-    .arg("image2")
-    .arg("-i")
-    .arg(format!("{}/img%0d.png", source_dir.display()))
-    .arg("-c:v")
-    .arg("vp8")
-    .arg("-format")
-    .arg("rgba")
-    .arg("-minrate")
-    .arg("5200k")
-    .arg("-maxrate")
-    .arg("5200k")
-    .arg("-b:v")
-    .arg("5200k")
-    // .arg("alpha_mode=\"1\"")
-    .arg(format!("{}/{}", dest_dir.display(), output_name))
-    .arg("-hide_banner")
-    .output();
-  let result = match command {
-    Ok(val) => val,
-    Err(e) => panic!("error running ffmpeg: {}", e),
-  };
-
-  return "Hi there".to_string()
-}
-
 pub fn export_bridge(
-  path_to_bridge_frames: &Path, 
+  path_to_bridge_frames: &Path,
+  outputName: String,
   path_to_frame_1: &Path, 
   path_to_frame_2: &Path
 ) -> String {
@@ -259,7 +259,8 @@ pub fn export_bridge(
   create_video_from_frames(
     path_to_bridge_frames.to_path_buf(),
     bridge_video_path(frame_1),
-    format!("{}_{}.webm", filename(&frame_1), filename(&frame_2).as_str()).as_str()
+    // outputName.as_str()
+    format!("{}to{}.webm", filename(&frame_1), filename(&frame_2).as_str()).as_str()
   )
 }
 
