@@ -49,6 +49,14 @@ pub fn notify_status_update_(
   progress_percent: i32, 
   alert_message: String, 
   error: String) {
+  dbg!("######################notifying status update:");
+  dbg!("label_of_destination_window", label_of_destination_window.clone());
+  dbg!("label_of_item", label_of_item.clone());
+  dbg!("status_of_item", status_of_item.clone());
+  dbg!("progress_percent", progress_percent);
+  dbg!("alert_message", alert_message.clone());
+  dbg!("error", error.clone());
+  dbg!("######################");
   let destination_window = app_handle.get_window(label_of_destination_window.as_str()).unwrap();
   destination_window.emit("status-update", StatusUpdate {
     label_of_item: label_of_item,

@@ -5,12 +5,18 @@
 #[cfg(test)] 
   use crate::ghostidle::GhostIdle;
   use crate::{tauri_events::ClickFramePayload, ghostidle::{VideoClip, VideoBridge}};
+  // macro to help run async funcs in await mode so we can test the outcomes
+  macro_rules! aw {
+    ($e:expr) => {
+        tokio_test::block_on($e)
+    };
+  }
 
+  // TODO: helper to get the names of the frames, needs to be made generic
   fn framename(filename: &str) -> String {
     let path_to_frames = "C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\frames";
     format!("{}\\{}", path_to_frames, filename)
   }
-
 
   // #[test]
   // fn create_a_new_video_clip() {
@@ -29,14 +35,20 @@
   //   assert_eq!(clip.video_clip_name, "4thru25".to_string());
   // }
 
-  // TODO: make this async and callback to app_handle when done
+  // async fn run_video_clip_export(clip: VideoClip) -> String{
+  //   println!("calling run_video_clip_export now");
+  //   clip.export("C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\", None).await;
+  //   println!("done calling run_video_clip_export");
+  //   "done".to_string()
+  // }
+
   // #[test]
   // fn export_a_video_clip() {
   //   let mut clip = VideoClip::new(4, framename("frame_0004.png"), -1, "".to_string());
   //   clip.add_last_frame(199, framename("frame_0199.png"));
-  //   clip.export("C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\", None);
+  //   let res = aw!(run_video_clip_export(clip));
+  //   // confirm video exists and is correct in folder
   // }
-
 
   // #[test]
   // fn create_a_new_video_bridge() {
@@ -47,12 +59,20 @@
   //   assert_eq!(bridge.destination_clip.index_of_final_frame, 67);
   // }
 
+  // helper to run the next test in async:
+  async fn run_video_bridge_export(bridge: VideoBridge) -> String{
+    println!("calling run_video_bridge_export now");
+    bridge.export("C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\", None).await;
+    println!("done calling run_video_bridge_export");
+    "done".to_string()
+  }
+
   #[test]
   fn export_a_video_bridge() {
     let clipA = VideoClip::new(4, framename("frame_0004.png"), 22, framename("frame_0022.png"));
     let clipB = VideoClip::new(274, framename("frame_0274.png"), 280, framename("frame_0280.png"));
     let bridge = VideoBridge::new(clipA, clipB);
-    bridge.export("C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\", None);
+    let res = aw!(run_video_bridge_export(bridge));
   }
 
 

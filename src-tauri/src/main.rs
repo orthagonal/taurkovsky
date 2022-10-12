@@ -57,8 +57,8 @@ fn main() {
         "".to_string()
       );
       let mut ghostidle = ghostidle_arc.lock().unwrap();
-      ghostidle.add_frame(click_frame_payload, Some(app_handle.clone()));
-      ghostidle.send_to_frontend(app_handle.clone(), "control_panel");
+      // ghostidle.add_frame(click_frame_payload, Some(app_handle.clone()));
+      // ghostidle.send_to_frontend(app_handle.clone(), "control_panel");
     });
     Ok(())
   })
