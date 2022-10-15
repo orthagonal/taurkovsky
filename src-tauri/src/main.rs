@@ -19,6 +19,7 @@ pub mod test_ghostidle;
 
 #[tauri::command]
 fn set_working_dir(working_dir: &str) {
+  dbg!(working_dir);
   // could also do this with tauri::State<WorkingDir> managed state...
   env::set_current_dir(working_dir).unwrap();
 }
@@ -60,10 +61,8 @@ fn main() {
         "".to_string()
       );
       let mut ghostidle = ghostidle_arc.lock().unwrap();
-      println!("going to add a frame {}", click_frame_payload.path_to_frame);
       ghostidle.add_frame(click_frame_payload, Some(app_handle.clone()));
       ghostidle.send_to_frontend(app_handle.clone(), "control_panel");
-      println!("added!--")
     });
     Ok(())
   })

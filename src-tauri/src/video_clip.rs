@@ -105,7 +105,6 @@ impl VideoClip {
     }
   }
 
-
   pub async fn export_async(&self, dest_dir: &str, app_handle_option: Option<&tauri::AppHandle>) {
     std::fs::create_dir_all(std::path::Path::new(&dest_dir)).unwrap();
     let start_frame = self.index_of_start_frame;

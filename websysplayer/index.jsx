@@ -5,18 +5,17 @@ import { copyFile, createDir, readDir } from '@tauri-apps/api/fs';
 import { appDir, basename, join, extname } from '@tauri-apps/api/path';
 import { appWindow, WebviewWindow } from '@tauri-apps/api/window'
 
-const getWorkingDir = async () => {
+const getRootDir = async () => {
   const dir = await appDir();
   return dir;
   // return "E://taur";
-  // return join(dir, 'working');
 };
 
 // Open the last dir opened or a selection dialog for image files
 // TODO: need to add a button to click to reset / start over with new video
 const init = async () => {
   // let dir = await appDir();
-  let dir = await getWorkingDir();
+  let dir = await getRootDir();
   let selected;
   // check if they have a last one open
   const dirList = await readDir(dir);
@@ -37,7 +36,7 @@ const init = async () => {
 };
 
 const getWorkingDir = async (sourcePath) => {
-  const dir = await getWorkingDir();
+  const dir = await getRootDir();
   const extension = await extname(sourcePath);
   const fileStemName = (await basename(sourcePath)).replace(`.${extension}`, '');
   const workingDir = await join(dir, fileStemName);
@@ -69,7 +68,7 @@ const displayThumbsDir = async (sourcePath) => {
   // keep watching until something appears, good enough for now
   // the 'right' way to do this is probably use a watcher in rust then signal here when ready
   if (frameEntries.length === 0) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 5000));
     return displayThumbsDir(sourcePath);
   }
   const videoFrameList = document.getElementById('video-frame-list');
