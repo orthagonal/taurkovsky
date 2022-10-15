@@ -4,8 +4,9 @@ this is the main place that the jsx communicates with the rust code
 */
 use std::{sync::{Arc, Mutex}, path::Path};
 use tauri::Manager;
-use crate::{ghostidle::{VideoClip, VideoBridge}, generating_events::working_dir_string};
-use crate::generating_events::{working_dir_path, filename};
+use crate::{generating_events::get_cwd_string, video_clip::VideoClip, video_bridge::VideoBridge};
+
+use crate::generating_events::{get_cwd, filename};
 
 // when the user clicks a frame of video in the main screen:
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -50,12 +51,12 @@ pub fn notify_status_update_(
   alert_message: String, 
   error: String) {
   dbg!("######################notifying status update:");
-  dbg!("label_of_destination_window", label_of_destination_window.clone());
-  dbg!("label_of_item", label_of_item.clone());
-  dbg!("status_of_item", status_of_item.clone());
-  dbg!("progress_percent", progress_percent);
-  dbg!("alert_message", alert_message.clone());
-  dbg!("error", error.clone());
+  dbg!(label_of_destination_window.clone());
+  dbg!(label_of_item.clone());
+  dbg!(status_of_item.clone());
+  dbg!(progress_percent);
+  dbg!(alert_message.clone());
+  dbg!(error.clone());
   dbg!("######################");
   let destination_window = app_handle.get_window(label_of_destination_window.as_str()).unwrap();
   destination_window.emit("status-update", StatusUpdate {
@@ -82,9 +83,9 @@ pub fn export_ghostidle(
   // export each clip in between as a video
   // for clip in clips.iter() {
   //   let start_frame = filename(&clip.path_to_start_frame);
-  //   let end_frame = filename(&clip.path_to_final_frame);
+  //   let end_frame = get_cwd_string(&clip.path_to_final_frame);
   //   let frames_dir = path_to_frames_dir(&clip.path_to_start_frame);
-  //   let output_dir = working_dir_path(&clip.path_to_start_frame);
+  //   let output_dir = get_cwd(&clip.path_to_start_frame);
   //   let clip_info = frame_diff(&start_frame, &end_frame);
   //   let new_file = create_video_clip(frames_dir, output_dir, clip_info);
   //   // notify_video_ready(app_handle.clone(), new_file);
@@ -100,7 +101,8 @@ pub fn export_ghostidle(
       let path_to_frame_1 = Path::new(&clip_one.path_to_final_frame);
       let path_to_frame_2 = Path::new(&clip_two.path_to_start_frame);
       let frame_1 = &clip_one.path_to_start_frame;
-      let string_to_bridge_frames = format!("{}_{}", working_dir_string(&frame_1), filename(&frame_1));
+      let string_to_bridge_frames = format!("{}_{}", get_cwd_string(), filename(&frame_1));
+      // let string_to_bridge_frames = format!("{}_{}", get_cwd_string(&frame_1), filename(&frame_1));
       let path_to_bridge_frames = Path::new(&string_to_bridge_frames);
       if !previous_reports.contains_key(&string_to_bridge_frames) {
         notify_status_update_(app_handle.clone(), "control_panel".to_string(), string_to_bridge_frames.clone(), "generating bridge frames".to_string(), 0, "".to_string(), "".to_string());
@@ -128,7 +130,8 @@ pub fn export_ghostidle(
       let path_to_frame_1 = Path::new(&clip_two.path_to_final_frame);
       let path_to_frame_2 = Path::new(&clip_one.path_to_start_frame);
       let frame_2 = &clip_two.path_to_start_frame;
-      let string_to_bridge_frames2 = format!("{}_{}", working_dir_string(&frame_2), filename(&frame_2));
+      let string_to_bridge_frames2 = format!("{}_{}", get_cwd_string(), filename(&frame_2));
+      // let string_to_bridge_frames2 = format!("{}_{}", get_cwd_string(&frame_2), filename(&frame_2));
       let path_to_bridge_frames2 = Path::new(&string_to_bridge_frames2);
       if !previous_reports.contains_key(&string_to_bridge_frames2) {
         notify_status_update_(app_handle.clone(), "control_panel".to_string(), string_to_bridge_frames2.clone(), "generating bridge frames".to_string(), 0, "".to_string(), "".to_string());

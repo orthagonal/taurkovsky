@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::env;
 use generating_events::*;
-use ghostidle::{VideoClip, GhostIdle};
+use ghostidle::*;
+
 use tauri_events::*;
 use tauri::Manager;
 use std::sync::{Arc, Mutex};
@@ -12,6 +13,8 @@ mod generating_events;
 mod tauri_events;
 // mod test_tauri_events;
 pub mod ghostidle;
+pub mod video_clip;
+pub mod video_bridge;
 pub mod test_ghostidle;
 
 #[tauri::command]
@@ -46,6 +49,8 @@ fn main() {
     let app_handle = app.handle();
     let id = main_window.listen("click", move|event| {
       let click_frame_payload: ClickFramePayload = serde_json::from_str(event.payload().unwrap()).unwrap();
+      dbg!("this is it");
+      dbg!(click_frame_payload.clone());
       // think i just put this here for testing purposes?
       notify_status_update_(
         app_handle.clone(),
@@ -57,8 +62,10 @@ fn main() {
         "".to_string()
       );
       let mut ghostidle = ghostidle_arc.lock().unwrap();
-      // ghostidle.add_frame(click_frame_payload, Some(app_handle.clone()));
-      // ghostidle.send_to_frontend(app_handle.clone(), "control_panel");
+      println!("going to add a frame {}", click_frame_payload.path_to_frame);
+      ghostidle.add_frame(click_frame_payload, Some(app_handle.clone()));
+      ghostidle.send_to_frontend(app_handle.clone(), "control_panel");
+      println!("added!--")
     });
     Ok(())
   })

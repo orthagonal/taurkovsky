@@ -7,257 +7,16 @@ use std::{
 };
 use serde::{Serialize, Deserialize};
 use tauri::Manager;
-use crate::{generating_events::{bridge_video_string, bridge_frames_path, filename, working_dir_path, working_dir_string, bridge_video_path, bridge_frames_string, frames_dir_string}, tauri_events::notify_status_update_};
+use crate::{  
+  generating_events::{
+    filename, 
+    get_cwd_string 
+  }, 
+  tauri_events::notify_status_update_, video_bridge::VideoBridge, video_clip::VideoClip
+};
 use graphlib::{Graph, VertexId};
 // used for spawning ffmpeg.exe calls in the background:
 // use tauri::api::process::{Command, CommandEvent};
-
-
-// internal list of clips selected by user by clicking frames
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct VideoClip {
-  pub index_of_start_frame: i32,
-  pub path_to_start_frame: String,
-  pub index_of_final_frame: i32, 
-  pub path_to_final_frame: String,
-  pub video_clip_name: String,
-  pub path_to_generated_video: String
-}  // TODO: do i want to impl the generation of video_clip_name etc????
-
-impl VideoClip {
-  pub fn new(index_of_start_frame: i32, path_to_start_frame: String, index_of_final_frame: i32, path_to_final_frame: String) -> VideoClip {
-    println!("the path is {}", working_dir_string(&path_to_start_frame.clone()));
-    VideoClip {
-      index_of_start_frame,
-      path_to_start_frame: path_to_start_frame.clone(),
-      index_of_final_frame,
-      video_clip_name: "".to_string(),
-      path_to_final_frame: path_to_final_frame.clone(),
-      path_to_generated_video: "unknown".to_string(),
-    }
-  }
-
-  pub fn add_last_frame(&mut self, index_of_final_frame: i32, path_to_final_frame: String) {
-    self.index_of_final_frame = index_of_final_frame;
-    self.path_to_final_frame = path_to_final_frame;
-    self.update_video_clip_name();
-  }
-
-  pub fn update_video_clip_name(&mut self) {
-    self.video_clip_name = format!("{}thru{}", self.index_of_start_frame, self.index_of_final_frame)
-  }
-
-  // export clips as webm video:
-  pub async fn export(&self, dest_dir: &str, app_handle_option: Option<&tauri::AppHandle>) {
-    std::fs::create_dir_all(std::path::Path::new(&dest_dir)).unwrap();
-    let start_frame = self.index_of_start_frame;
-    let final_frame = self.index_of_final_frame;
-    // ffmpeg  -start_number 1 -pattern_type sequence -i frame_0004/frames/frame_%04d.png -c:v vp8 -format rgba -vframes 150 frame_0004/4thru99.webm -hide_banner
-    {
-      let start_frame = start_frame;
-      let path_to_start_frame = self.path_to_start_frame.to_string();
-      let video_clip_name = self.video_clip_name.to_string();
-      let dest_dir = dest_dir.to_string();
-      let child_thread = tauri::async_runtime::spawn(async move {
-        let cmd = Command::new("cmd")
-          .current_dir(std::path::PathBuf::from("C:/ffmpeg"))
-          .arg("/C")
-          .arg("ffmpeg.exe")
-          // make video starting at start frame and going for n frames
-          .arg("-start_number")
-          .arg(format!("{}", start_frame))
-          .arg("-pattern_type")
-          .arg("sequence")
-          .arg("-i")
-          // .arg(self.path_to_start_frame.as_str()) 
-          .arg(format!("{}\\frame_%04d.png", frames_dir_string(path_to_start_frame.as_str()))) // frames should have been named frame_0001.png, frame_0002.png in this folder by this app using ffmpeg
-          .arg("-c:v")
-          .arg("vp8")
-          .arg("-format")
-          .arg("rgba")
-          // force CBR
-          .arg("-minrate")
-          .arg("5200k")
-          .arg("-maxrate")
-          .arg("5200k")
-          .arg("-b:v")
-          .arg("5200k")
-          // .arg("alpha_mode=\"1\"")
-          .arg("-vframes")
-          .arg((final_frame - start_frame).to_string())
-          .arg(format!("{}/{}.webm", dest_dir, video_clip_name))
-          .arg("-hide_banner")
-          .output()
-          .unwrap(); // executes command in sync
-        println!("status: {}", cmd.status);
-        println!("stdout: {}", String::from_utf8_lossy(&cmd.stdout));
-        println!("stderr: {}", String::from_utf8_lossy(&cmd.stderr));
-      });
-      let res = child_thread.await;
-      // if there's an app handle, send a message to the frontend
-      if let Some(app_handle) = app_handle_option {
-        notify_status_update_(
-          app_handle.clone(), 
-          String::from("control_panel"),
-          String::from("1to25.webm"), 
-          String::from("video_clip_exported"),
-          100,
-          String::from(""), 
-          String::from("")
-        );
-      } else {
-        println!("no app handle but video was generated");
-      }
-    };
-  }
-}
-
-// is to be emitted to the frontend
-// current status of each video clip
-#[derive(Clone, Debug)]
-pub struct VideoClipStatus {
-  pub end_frame_is_selected: bool, // user selected first frame and then final frame
-  pub video_is_generated: bool,
-  pub status_message: String // general purpose status message for user
-}
-
-// automatically generated bridges that connect up all of the 
-// videoclips the user selected
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct VideoBridge {
-  pub origin_clip: VideoClip,
-  pub destination_clip: VideoClip,
-  pub path_to_generated_frames: String,
-  pub path_to_generated_video: String
-}
-
-impl VideoBridge {
-  pub fn new(origin_clip: VideoClip, destination_clip: VideoClip) -> VideoBridge {
-    // rectification of the names:
-    let origin_frame_index = origin_clip.index_of_final_frame;
-    let destination_frame_index = destination_clip.index_of_start_frame;
-    let bridgeName = format!("{}to{}", origin_frame_index, destination_frame_index);
-    let videoName = format!("{}.webm", bridgeName);
-    let path_to_generated_frames = bridge_frames_path(&origin_clip.path_to_start_frame.clone()).join(bridgeName.clone()).to_str().unwrap().to_string();
-    let path_to_generated_video = working_dir_path(&origin_clip.path_to_start_frame.clone()).join(videoName).to_str().unwrap().to_string();
-    VideoBridge {
-      origin_clip: origin_clip,
-      destination_clip: destination_clip,
-      path_to_generated_frames,
-      path_to_generated_video 
-    }
-  }
-
-  // use your system to generate tween frames or use RIFE by default
-  pub async fn generate_frames(&self, app_handle_option: Option<&tauri::AppHandle>) {
-    // TODO: all this needs to be generalized and configurable for others to use
-    // `python3 inference_img.py --exp 4 --img ${originClip} ${dstClip} --folderout ${pathToTweenFrames}`,
-    let system_root = std::env::var("SYSTEMROOT").unwrap(); 
-    let cmd_string = Path::new(&system_root).join(r#"/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"#);
-    let path_to_start_frame = self.origin_clip.path_to_start_frame.clone();
-    let path_to_final_frame = self.destination_clip.path_to_start_frame.clone();
-    let path_to_generated_frames = self.path_to_generated_frames.clone();
-    {
-      let child_thread = tauri::async_runtime::spawn(async move {
-        let command = Command::new(cmd_string)
-          .current_dir("c:\\GitHub\\rife\\rife")
-          .arg("-c")
-          .arg("python3")
-          .arg("inference_img.py")
-          .arg("--exp 4")
-          .arg("--img")
-          .arg(path_to_start_frame.clone())
-          .arg(path_to_final_frame.clone())
-          .arg(format!("--folderout {} ", path_to_generated_frames))
-          .output().unwrap();
-        println!("{}", String::from_utf8(command.stdout).unwrap());
-        println!("{}", String::from_utf8(command.stderr).unwrap());
-        println!("generated frames in {}", path_to_generated_frames);
-      });
-      let res = child_thread.await;
-      // if there's an app handle, send a message to the frontend
-      if let Some(app_handle) = app_handle_option {
-        notify_status_update_(
-          app_handle.clone(), 
-          String::from("control_panel"),
-          String::from("label_of_item"), 
-          String::from("frames_exported"),
-          100,
-          String::from(""), 
-          String::from("")
-        );
-      } else {
-        println!("no app handle but frames were generated");
-      }
-    }
-  }
-  
-  pub async fn export(&self, dest_dir: &str, app_handle_option: Option<&tauri::AppHandle>) {
-    println!("path to bridge frames is {}", self.path_to_generated_frames);
-    let path_to_generated_frames = self.path_to_generated_frames.clone();
-    let path_to_generated_video = self.path_to_generated_video.clone();
-    // system assumes you don't have identically named frames in different folders
-    // so always skip re-creating bridge frames:
-    if !Path::exists(Path::new(&self.path_to_generated_frames)) {
-      self.generate_frames(app_handle_option).await;
-    }
-    {
-      let child_thread = tauri::async_runtime::spawn(async move {
-        // ffmpeg  -start_number 1 -i frame_0004/frames/frame_%04d.png -c:v vp8 -format rgba -vframes 150 frame_0004/4thru99.webm -hide_banner
-        let command = Command::new("cmd")
-          .current_dir(std::path::PathBuf::from("C:/ffmpeg"))
-          .arg("/C")
-          .arg("ffmpeg.exe")
-          .arg("-i")
-          .arg(format!("{}\\img%0d.png", path_to_generated_frames))
-          .arg("-c:v")
-          .arg("vp8")
-          .arg("-format")
-          .arg("rgba")
-          // force CBR
-          .arg("-minrate")
-          .arg("5200k")
-          .arg("-maxrate")
-          .arg("5200k")
-          .arg("-b:v")
-          .arg("5200k")
-          // .arg("alpha_mode=\"1\"")
-          .arg(path_to_generated_video)
-          .arg("-hide_banner")
-          .output()
-          .unwrap(); // executes command in sync
-        println!("status: {}", command.status);
-        println!("stdout: {}", String::from_utf8_lossy(&command.stdout));
-        println!("stderr: {}", String::from_utf8_lossy(&command.stderr));
-      });
-      let res = child_thread.await;
-      // if there's an app handle, send a message to the frontend
-      if let Some(app_handle) = app_handle_option {
-        notify_status_update_(
-          app_handle.clone(), 
-          String::from("control_panel"),
-          String::from("label_of_item"), 
-          String::from("frames_exported"),
-          100,
-          String::from(""), 
-          String::from("")
-        );
-      } else {
-        println!("no app handle but bridge video was generated");
-      }
-    }
-  }
-}
-
-// current status of each video bridge
-#[derive(Clone, Debug)]
-pub struct VideoBridgeStatus {
-  pub frames_started_generating: bool,
-  pub frames_done_generating: bool,
-  pub video_started_generating: bool,
-  pub video_done_generating: bool,
-  pub status_message: String // general purpose status messaage for user
-}
 
 #[derive(Clone, Debug)]
 pub struct GhostIdle {
@@ -286,15 +45,14 @@ impl GhostIdle {
         if last_clip.index_of_final_frame != -1 {
           self.last_clip_index = self.graph.add_vertex(VideoClip::new(frame.index_of_frame, frame.path_to_frame, -1, "".to_string()));
         } else {
-          // this is the second frame of the clip, get a mutable copy of it and update:
+          // the user selected the final frame of the clip, get a mutable copy of it and update:
           let mut_last_clip = self.graph.fetch_mut(&self.last_clip_index).unwrap();
           mut_last_clip.add_last_frame(frame.index_of_frame, frame.path_to_frame);
           // todo: trigger thread to immediately start generating videoclip and call notify_video when done
           match app_handle_option {
             Some(app_handle) => {
-              println!("app handle here!!!");
-              println!("app handle here!!!");
-              println!("app handle here!!!");
+              mut_last_clip.export(&get_cwd_string(), None);
+              // mut_last_clip.export(&get_cwd_string(&mut_last_clip.path_to_generated_video), None);
             }
             None => {
               // do nothing, mainly used by cargo test when unit testing with no tauri app
@@ -303,6 +61,7 @@ impl GhostIdle {
         }
       },
       None => {
+        println!("no last clip exists this is the first one");
         // if there are no clips, then we're starting a new clip
         self.last_clip_index = self.graph.add_vertex(VideoClip::new(frame.index_of_frame, frame.path_to_frame, -1, "".to_string()));
       }
@@ -339,6 +98,7 @@ impl GhostIdle {
   pub fn save_to_disk(&mut self) {
   }
 
+  // serialize the ghostidle graph and send to front end:
   pub fn send_to_frontend(&mut self, app_handle: tauri::AppHandle, destination_frontend: &str) {
     let mut payload = crate::tauri_events::GhostIdlePayload {
       clips: Vec::<VideoClip>::new(),

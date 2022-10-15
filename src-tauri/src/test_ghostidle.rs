@@ -4,7 +4,7 @@
 
 #[cfg(test)] 
   use crate::ghostidle::GhostIdle;
-  use crate::{tauri_events::ClickFramePayload, ghostidle::{VideoClip, VideoBridge}};
+  use crate::{tauri_events::ClickFramePayload, set_working_dir, generating_events::get_frames_string};
   // macro to help run async funcs in await mode so we can test the outcomes
   macro_rules! aw {
     ($e:expr) => {
@@ -16,6 +16,22 @@
   fn framename(filename: &str) -> String {
     let path_to_frames = "C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\frames";
     format!("{}\\{}", path_to_frames, filename)
+  }
+
+  #[test]
+  fn locate_files() {
+    let frame_path = "C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004";
+    set_working_dir(frame_path);
+    let working_dir = crate::generating_events::get_cwd_string();
+    let frames_dir = get_frames_string();
+    // let bridge_frames = crate::generating_events::bridge_frames_path(frame_path);
+    // let bridge_video = crate::generating_events::bridge_video_string(frame_path);
+    
+    dbg!(working_dir);
+    dbg!(frames_dir);
+    // dbg!(bridge_frames);
+    // dbg!(bridge_video);
+
   }
 
   // #[test]
@@ -60,23 +76,21 @@
   // }
 
   // helper to run the next test in async:
-  async fn run_video_bridge_export(bridge: VideoBridge) -> String{
-    println!("calling run_video_bridge_export now");
-    bridge.export("C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\", None).await;
-    println!("done calling run_video_bridge_export");
-    "done".to_string()
-  }
+  // async fn run_video_bridge_export(bridge: VideoBridge) -> String{
+  //   println!("calling run_video_bridge_export now");
+  //   bridge.export("C:\\GitHub\\taurkovsky\\src-tauri\\frame_0004\\", None).await;
+  //   println!("done calling run_video_bridge_export");
+  //   "done".to_string()
+  // }
 
-  #[test]
-  fn export_a_video_bridge() {
-    let clipA = VideoClip::new(4, framename("frame_0004.png"), 22, framename("frame_0022.png"));
-    let clipB = VideoClip::new(274, framename("frame_0274.png"), 280, framename("frame_0280.png"));
-    let bridge = VideoBridge::new(clipA, clipB);
-    let res = aw!(run_video_bridge_export(bridge));
-  }
+  // #[test]
+  // fn export_a_video_bridge() {
+  //   let clipA = VideoClip::new(4, framename("frame_0004.png"), 22, framename("frame_0022.png"));
+  //   let clipB = VideoClip::new(274, framename("frame_0274.png"), 280, framename("frame_0280.png"));
+  //   let bridge = VideoBridge::new(clipA, clipB);
+  //   let res = aw!(run_video_bridge_export(bridge));
+  // }
 
-
-  
   /*
   #[test]
   fn create_a_new_ghostidle() {

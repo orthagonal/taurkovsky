@@ -5,6 +5,44 @@ import { copyFile, createDir, readDir } from '@tauri-apps/api/fs';
 import { appDir, basename, join, extname } from '@tauri-apps/api/path';
 import { appWindow, WebviewWindow } from '@tauri-apps/api/window'
 
+const getWorkingDir = async () => {
+  const dir = await appDir();
+  return dir;
+  // return "E://taur";
+  // return join(dir, 'working');
+};
+
+// Open the last dir opened or a selection dialog for image files
+// TODO: need to add a button to click to reset / start over with new video
+const init = async () => {
+  // let dir = await appDir();
+  let dir = await getWorkingDir();
+  let selected;
+  // check if they have a last one open
+  const dirList = await readDir(dir);
+  if (dirList.length === 0) {
+    selected = await userSelectVideo();
+    // first make sure workspace exists:
+    const workingDir = await makeAllWorkingDirs(selected);
+    invoke('set_working_dir', { workingDir });
+    // framify the video:
+    const result = await invoke('framify_video_src', { srcVideoName: selected });
+    // display the frames:
+    await displayThumbsDir(await join(workingDir, 'thumbs'));
+  } else {
+    workingDir = dirList[0].path;
+    invoke('set_working_dir', { workingDir });
+    await displayThumbsDir(await join(workingDir, 'thumbs'));
+  }
+};
+
+const getWorkingDir = async (sourcePath) => {
+  const dir = await getWorkingDir();
+  const extension = await extname(sourcePath);
+  const fileStemName = (await basename(sourcePath)).replace(`.${extension}`, '');
+  const workingDir = await join(dir, fileStemName);
+  return workingDir;
+};
 
 /// when a source video is first loaded, dir structure will be:
 /// - app root
@@ -13,18 +51,12 @@ import { appWindow, WebviewWindow } from '@tauri-apps/api/window'
 ///    -frames
 ///    -bridge_video
 const makeAllWorkingDirs = async (sourcePath) => {
-  const dir = await appDir();
-  const extension = await extname(sourcePath);
-  const fileStemName = (await basename(sourcePath)).replace(`.${extension}`, '');
-  const workingDir = await join(dir, fileStemName);
+  const workingDir = await getWorkingDir(sourcePath);
   await createDir(workingDir, { recursive: true });
   await createDir(await join (workingDir, 'frames'), { recursive: true });
   await createDir(await join (workingDir, 'thumbs'), { recursive: true });
   await createDir(await join (workingDir, 'bridge_frames'), { recursive: true });
   await createDir(await join (workingDir, 'bridge_video'), { recursive: true });
-  invoke('set_working_dir', {
-    workingDir
-  });
   return workingDir;
 };
 
@@ -68,29 +100,15 @@ const displayThumbsDir = async (sourcePath) => {
   }
 };
 
-// Open a selection dialog for image files
-const f = async () => {
-  const selected = await open({
-    multiple: false, // only allow one file to be opened
-    filters: [{
-      name: 'Video',
-      extensions: ['mov', 'webm']
-    }]
-  });
-  if (selected === null) {
-    // user cancelled the selection
-  } else {
-    // first make sure workspace exists:
-    const workingDir = await makeAllWorkingDirs(selected);
-    // framify the video:
-    const result = await invoke('framify_video_src', {
-      srcVideoName: selected
-    });
-    // display the frames:
-    await displayThumbsDir(await join(workingDir, 'thumbs'));
-  }
-};
-f();
+const userSelectVideo = () => open({
+  multiple: false, // only allow one file to be opened
+  filters: [{
+    name: 'Video',
+    extensions: ['mov', 'webm']
+  }]
+});
+
+init();
 
 
 

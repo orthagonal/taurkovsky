@@ -11,30 +11,30 @@ use std::process::Command;
 use std::thread;
 
 /* convenience functions for paths */
+/* todo: probably clean this up some */
 pub fn filename(source: &str) -> String { Path::file_stem(Path::new(&source)).unwrap().to_str().unwrap().to_string() }
-pub fn working_dir_path(source_video_name: &str) -> PathBuf {
-// env should already have been set by set_current_dir
-let file_stem_name = Path::file_stem(Path::new(&source_video_name)).unwrap();
-  Path::new(&env::current_dir().unwrap()).join(&file_stem_name)
-}
-pub fn frames_dir_path(source_video_name: &str) -> PathBuf { working_dir_path(source_video_name).join("frames") }
-pub fn bridge_frames_path(source_video_name: &str) -> PathBuf { working_dir_path(source_video_name).join("bridge_frames") }
-pub fn bridge_video_path(source_video_name: &str) -> PathBuf { working_dir_path(source_video_name).join("bridge_video") }
-// the same but as strings:
-pub fn working_dir_string(source_video_name: &str) -> String { working_dir_path(source_video_name).to_str().unwrap().to_string() }
-pub fn frames_dir_string(source_video_name: &str) -> String { frames_dir_path(source_video_name).to_str().unwrap().to_string() }
+
+// selecting a new file with set_working_dir will change what this returns:
+pub fn get_cwd() -> PathBuf { env::current_dir().unwrap() }
+pub fn get_cwd_string() -> String { get_cwd().to_str().unwrap().to_string() }
+pub fn get_frames_path() -> PathBuf { get_cwd().join("frames") }
+pub fn get_frames_string() -> String { get_frames_path().to_str().unwrap().to_string() }
+
+// bridge exporting will need to be revisited:
+pub fn bridge_frames_path(source_video_name: &str) -> PathBuf { get_cwd().join("bridge_frames") }
+pub fn bridge_video_path(source_video_name: &str) -> PathBuf { get_cwd().join("bridge_video") }
 pub fn bridge_frames_string(source_video_name: &str) -> String { bridge_frames_path(source_video_name).to_str().unwrap().to_string() }
 pub fn bridge_video_string(source_video_name: &str) -> String { bridge_video_path(source_video_name).to_str().unwrap().to_string() }
 
 
 // will set up a working directory for the video, and generate frames from it
 pub fn add_new_video_source(new_video_source: String) -> PathBuf {
-  let path = working_dir_path(&new_video_source);
+  let path = get_cwd();
   match Path::new(&path).exists() {
     false => std::fs::create_dir(Path::new(&path)).unwrap(),
     true => println!("working dir already exists"),
   }
-  let frames_path = frames_dir_path(&new_video_source);
+  let frames_path = get_frames_path();
   match Path::new(&frames_path).exists() {
     false => std::fs::create_dir(Path::new(&frames_path)).unwrap(),
     true => println!("frames dir already exists"),
