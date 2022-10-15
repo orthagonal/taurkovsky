@@ -45,21 +45,13 @@ impl GhostIdle {
         if last_clip.index_of_final_frame != -1 {
           self.last_clip_index = self.graph.add_vertex(VideoClip::new(frame.index_of_frame, frame.path_to_frame, -1, "".to_string()));
         } else {
-          // the user selected the final frame of the clip, get a mutable copy of it and update:
+          // if the user selected the final frame for the clip, set it on the last clip added:
           let mut_last_clip = self.graph.fetch_mut(&self.last_clip_index).unwrap();
           mut_last_clip.add_last_frame(frame.index_of_frame, frame.path_to_frame);
-          // todo: trigger thread to immediately start generating videoclip and call notify_video when done
-          match app_handle_option {
-            Some(app_handle) => {
-              mut_last_clip.export(&get_cwd_string(), None);
-              // mut_last_clip.export(&get_cwd_string(&mut_last_clip.path_to_generated_video), None);
-            }
-            None => {
-              // do nothing, mainly used by cargo test when unit testing with no tauri app
-            }
-          }          
+          mut_last_clip.export(&get_cwd_string(), app_handle_option);
         }
       },
+      // if this is the very first frame of the very first clip created:
       None => {
         println!("no last clip exists this is the first one");
         // if there are no clips, then we're starting a new clip

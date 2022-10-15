@@ -43,21 +43,16 @@ impl VideoClip {
   }
 
   // export clips as webm video:
-  pub fn export(&self, dest_dir: &str, app_handle_option: Option<&tauri::AppHandle>) {
-    dbg!("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ ", &self.video_clip_name, dest_dir);
+  pub fn export(&self, dest_dir: &str, app_handle_option: Option<tauri::AppHandle>) {
     std::fs::create_dir_all(std::path::Path::new(&dest_dir)).unwrap();
     let start_frame = self.index_of_start_frame;
     let final_frame = self.index_of_final_frame;
     // ffmpeg  -start_number 1 -pattern_type sequence -i frame_0004/frames/frame_%04d.png -c:v vp8 -format rgba -vframes 150 frame_0004/4thru99.webm -hide_banner
     let start_frame = start_frame;
-    let path_to_start_frame = self.path_to_start_frame.to_string();
     let video_clip_name = self.video_clip_name.to_string();
     let dest_dir = dest_dir.to_string();
     let frames_src = format!("{}/{}", get_frames_string(), "frame_%04d.png");
     let output_path = format!("{}\\{}.webm", dest_dir, video_clip_name);
-    println!("starting ffmpeg export of {} to {}", video_clip_name, dest_dir);
-    dbg!(frames_src.clone());
-    dbg!(output_path.clone());
     let cmd = Command::new("cmd")
       .current_dir(std::path::PathBuf::from("C:/ffmpeg"))
       .arg("/C")
@@ -86,7 +81,7 @@ impl VideoClip {
       // // .arg("alpha_mode=\"1\"")
       .arg("-vframes")
       .arg((final_frame - start_frame).to_string())
-      .arg(output_path)
+      .arg(&output_path)
       .arg("-hide_banner")
       .output()
       .unwrap(); // executes command in sync
@@ -99,14 +94,14 @@ impl VideoClip {
       notify_status_update_(
         app_handle.clone(), 
         String::from("control_panel"),
-        String::from("1to25.webm"), 
+        output_path,
         String::from("video_clip_exported"),
         100,
         String::from(""), 
         String::from("")
       );
     } else {
-      println!("no app handle but video was generated");
+      println!("no app handle but video {} was generated", output_path);
     }
   }
 

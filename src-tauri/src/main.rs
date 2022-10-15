@@ -49,8 +49,6 @@ fn main() {
     let app_handle = app.handle();
     let id = main_window.listen("click", move|event| {
       let click_frame_payload: ClickFramePayload = serde_json::from_str(event.payload().unwrap()).unwrap();
-      dbg!("this is it");
-      dbg!(click_frame_payload.clone());
       // think i just put this here for testing purposes?
       notify_status_update_(
         app_handle.clone(),
