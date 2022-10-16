@@ -69,6 +69,20 @@
       },
     };
     const sampleBridge = {
+      '142thru202-43thru102': {
+        label_of_item: "142thru202-43thru102",
+        status_of_item: "added",
+        progress_percent: 50,
+        alert_message: "",
+        error: ""
+      },
+      '43thru102-142thru202': {
+        label_of_item: "43thru102-142thru202",
+        status_of_item: "added",
+        progress_percent: 50,
+        alert_message: "",
+        error: ""
+      },
     };
     const payload = {
       clips: [
@@ -94,15 +108,18 @@
     setTimeout(() => {
       onFrameClicked({ payload: sampleFrames[202] });
       onClipAdded({ payload: sampleClips[142_202] });
+      onBridgeAdded({ payload: sampleBridge['142thru202-43thru102'] });
+      onBridgeAdded({ payload: sampleBridge['43thru102-142thru202'] });
       onStatusUpdate({ payload: sampleUpdates['43thru102'] });
     }, 4000);
+  };
+  const onBridgeAdded = ({ payload }) => {
+    bridges[payload.label_of_item] = payload;
+    statusList[payload.label_of_item] = 'added';
   };
   const removeStatus = (name) => {
     delete statusList[name];
   }
-  const updateClip = (payload) => {
-    clipList[payload.label_of_item] = payload;
-  };
   const removeClip = (name) => {
     delete clipList[name];
   }
@@ -152,6 +169,11 @@
         return "bg-gray-500";
     }
   }
+
+  // TODO: DOTVIZ all this stuff
+  // TODO: DOTVIZ all this stuff
+  // TODO: DOTVIZ all this stuff
+  // TODO: DOTVIZ all this stuff
 </script>
 
 <style>
