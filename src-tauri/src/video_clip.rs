@@ -32,13 +32,11 @@ impl VideoClip {
     }
   }
 
+  // after last frame is added, the video_clip_name is generated and should serve as the 'label'
+  // for the clip
   pub fn add_last_frame(&mut self, index_of_final_frame: i32, path_to_final_frame: String) {
     self.index_of_final_frame = index_of_final_frame;
     self.path_to_final_frame = path_to_final_frame;
-    self.update_video_clip_name();
-  }
-
-  pub fn update_video_clip_name(&mut self) {
     self.video_clip_name = format!("{}thru{}", self.index_of_start_frame, self.index_of_final_frame)
   }
 

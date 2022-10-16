@@ -6,45 +6,98 @@
   import { onMount } from 'svelte';
   import './global.scss';
   let statusList = {}; // List of all the status of the different services
-  let clipList = {}; // index of start frame -> VideoClip object
-  let bridges = {}; // index of origin frame -> VideoBridge object
+  let clipList = {}; // <index_of_start_frame>thru<end_of_final_frame> -> VideoClip object
+  let bridges = {}; // <index_of_origin_frame> -> VideoBridge object
 
   const simulate = async => {
-    const payload = {
-      clips: [
-        {
+    // sample event payloads to build tests from:
+    const sampleClips = {
+      43_102: {
           index_of_start_frame: 43,
           path_to_start_frame: "C:\\Users\\ortha\\AppData\\Roaming\\taurkovsky\\MVI_5830\\frames\\frame_0044.png",
           index_of_final_frame: 102,
           path_to_final_frame: "C:\\Users\\ortha\\AppData\\Roaming\\taurkovsky\\MVI_5830\\frames\\frame_0102.png",
-          video_clip_name: "",
+          video_clip_name: "43thru102",
           path_to_generated_video: "",
         },
-        {
+      142_202: {
           index_of_start_frame: 142,
           path_to_start_frame: "C:\\Users\\ortha\\AppData\\Roaming\\taurkovsky\\MVI_5830\\frames\\frame_0142.png",
           index_of_final_frame: 202,
           path_to_final_frame: "C:\\Users\\ortha\\AppData\\Roaming\\taurkovsky\\MVI_5830\\frames\\frame_0202.png",
-          video_clip_name: "",
+          video_clip_name: "142thru202",
           path_to_generated_video: "",
         },
-      ],
-      bridges: []
     };
+    const sampleFrames = {
+      43: {
+        label_of_item: "C:\\Users\\ortha\\AppData\\Roaming\\taurkovsky\\MVI_5830\\frames\\frame_0043.png",
+        status_of_item: "added",
+        progress_percent: 50,
+        alert_message: "",
+        error: ""
+      },
+      102: {
+        label_of_item: "C:\\Users\\ortha\\AppData\\Roaming\\taurkovsky\\MVI_5830\\frames\\frame_0102.png",
+        status_of_item: "added",
+        progress_percent: 50,
+        alert_message: "",
+        error: ""
+      }, 
+      142: {
+        label_of_item: "C:\\Users\\ortha\\AppData\\Roaming\\taurkovsky\\MVI_5830\\frames\\frame_0142.png",
+        status_of_item: "added",
+        progress_percent: 50,
+        alert_message: "",
+        error: ""
+      },
+      202: {
+        label_of_item: "C:\\Users\\ortha\\AppData\\Roaming\\taurkovsky\\MVI_5830\\frames\\frame_0202.png",
+        status_of_item: "added",
+        progress_percent: 50,
+        alert_message: "",
+        error: ""
+      } 
+    };
+    const sampleUpdates = {
+      '43thru102': {
+        label_of_item: "43thru102",
+        status_of_item: "processing",
+        progress_percent: 50,
+        alert_message: "",
+        error: ""
+      },
+    };
+    const sampleBridge = {
+    };
+    const payload = {
+      clips: [
+        sampleClips[43_102],
+        sampleClips[142_202],
+      ],
+      bridges: [
+      ]
+    };
+    // simulate clicking two frames to create a clip:
     setTimeout(() => {
-      onFrameClicked({
-        payload: {
-          label_of_item: "C:\\Users\\ortha\\AppData\\Roaming\\taurkovsky\\MVI_5830\\frames\\frame_0142.png",
-          status_of_item: "added",
-          progress_percent: 50,
-          alert_message: "",
-          error: ""
-        }
-      })
-    }, 1500);
+      onFrameClicked({ payload: sampleFrames[43] });
+    }, 1000);
+    setTimeout(() => {
+      onFrameClicked({ payload: sampleFrames[102] });
+      onClipAdded({ payload: sampleClips[43_102] });
+    }, 2000);
+    setTimeout(() => {
+      onFrameClicked({ payload: sampleFrames[142] });
+      onStatusUpdate({ payload: sampleUpdates['43thru102'] });
+      sampleUpdates['43thru102'].status_of_item = 'ready';
+    }, 3000);
+    setTimeout(() => {
+      onFrameClicked({ payload: sampleFrames[202] });
+      onClipAdded({ payload: sampleClips[142_202] });
+      onStatusUpdate({ payload: sampleUpdates['43thru102'] });
+    }, 4000);
   };
-
-   const removeStatus = (name) => {
+  const removeStatus = (name) => {
     delete statusList[name];
   }
   const updateClip = (payload) => {
@@ -54,12 +107,30 @@
     delete clipList[name];
   }
 
-  const onStatusUpdate = (event) => {
-    statusList[event.payload.label_of_item] = event.payload;
+  // payload schema:
+  // {
+  //   index_of_start_frame:43,
+  //   path_to_start_frame: "/c/workspace",
+  //   index_of_final_frame:102,
+  //   path_to_final_frame:"/c/workspace",
+  //   video_clip_name:"",
+  //   path_to_generated_video:""
+  // }
+  const getClipName = (clip) => `${clip.index_of_start_frame}thru${clip.index_of_final_frame}`;
+  const onClipAdded = (event) => {
+    const { payload } = event;
+    clipList[payload.video_clip_name] = payload;
+    statusList[payload.video_clip_name] = "added";
   };
+  const onStatusUpdate = (event) => {
+    const { payload } = event;
+    statusList[payload.label_of_item] = payload.status_of_item;
+  };
+
+  // flash message that gives feedback to user on events
+  let FlashMessage = "Launched...";
   const onFrameClicked = (event) => {
-    clipList[event.payload.label_of_item] = event.payload.status_of_item;
-    statusList[event.payload.label_of_item] = "added";
+    FlashMessage = "Frame clicked: " + event.payload.label_of_item;
   };
   onMount(async () => {
     appWindow.listen('status-update', onStatusUpdate);
@@ -67,16 +138,15 @@
     simulate();
   });
 
-
   const getClass = (status) => {
     switch (status) {
       case "added":
         return "bg-blue-500";
       case "processing":
-        return "bg-yellow-500";
+        return "bg-yellow-500 blink";
       case "error":
         return "bg-red-500";
-      case "done":
+      case "ready":
         return "bg-green-500";
       default:
         return "bg-gray-500";
@@ -84,20 +154,26 @@
   }
 </script>
 
-<style></style>
+<style>
+</style>
 
 <main>
-  <h2> Status Panel </h2>
+  <div class="text-2xl">
+    Control Panel
+  </div>
+  <div class="text-xl"> 
+    { FlashMessage } 
+  </div>
   List of selected clips    
   <ul class="border-2">
-    {#each Object.keys(clipList) as key}
+    {#each Object.keys(statusList) as key}
     <li>
-      <span >
+      <span class="bg-gray-500 text-white">
         {key} 
       </span>
       -> 
-      <span class="{getClass(clipList[key])}">
-        {clipList[key]} 
+      <span class="{getClass(statusList[key])}">
+        {statusList[key]} 
       </span>
     </li>
     {/each}
