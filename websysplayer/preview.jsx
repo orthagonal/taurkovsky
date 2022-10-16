@@ -3,6 +3,14 @@ import { appWindow, WebviewWindow } from '@tauri-apps/api/window'
 import { listen , emit } from '@tauri-apps/api/event';
 import { sequenceLinear } from './seq.jsx';
 
+// listen to notify events
+listen('ghostidle', (event) => {
+  console.log('ghostidle', event);
+  alert(JSON.stringify(event));
+});
+
+// when graph updates, update graph
+// choose next
 // todo: enforce getNextVideo
 // todo: allow switch between morph mode, ghostidle mode, transition mode
 
@@ -12,6 +20,7 @@ let videoA = undefined;
 let videoB = undefined;
 let started = false;
 const videoSources = [];
+
 
 const nextVideo = (curVideo) => {
 // infinitely loop through the videoSources

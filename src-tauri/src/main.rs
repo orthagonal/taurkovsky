@@ -51,15 +51,15 @@ fn main() {
     let id = main_window.listen("click", move|event| {
       let click_frame_payload: ClickFramePayload = serde_json::from_str(event.payload().unwrap()).unwrap();
       // think i just put this here for testing purposes?
-      notify_status_update_(
-        app_handle.clone(),
-        "control_panel".to_string(),
-        click_frame_payload.path_to_frame.clone(),
-        "frame clicked".to_string(),
-        50,
-        "alert message from rust".to_string(),
-        "".to_string()
-      );
+      // notify_status_update_(
+      //   app_handle.clone(),
+      //   "control_panel".to_string(),
+      //   click_frame_payload.path_to_frame.clone(),
+      //   "frame-clicked".to_string(),
+      //   50,
+      //   "alert message from rust".to_string(),
+      //   "".to_string()
+      // );
       let mut ghostidle = ghostidle_arc.lock().unwrap();
       ghostidle.add_frame(click_frame_payload, Some(app_handle.clone()));
       ghostidle.send_to_frontend(app_handle.clone(), "control_panel");

@@ -1,10 +1,11 @@
-module.exports = {
-  purge: [
-    content: [
-      "./src/**/*.svelte",
-    ],
-    enabled: production // disable purge in dev
-  ],
+export default {
+  purge: ["./index.html",'./src/**/*.{svelte,js,ts}'], 
+  // purge: [
+  //   content: [
+  //     "./src/**/*.svelte",
+  //   ],
+  //   enabled: production // disable purge in dev
+  // ],
   darkMode: false, // or 'media' or 'class'
   theme: {
     extend: {},

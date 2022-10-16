@@ -48,6 +48,15 @@ impl GhostIdle {
           // if the user selected the final frame for the clip, set it on the last clip added:
           let mut_last_clip = self.graph.fetch_mut(&self.last_clip_index).unwrap();
           mut_last_clip.add_last_frame(frame.index_of_frame, frame.path_to_frame);
+          notify_status_update_(
+            app_handle_option.unwrap().clone(),
+            "control_panel".to_string(),
+            format!("{}thru{}.webm", mut_last_clip.index_of_start_frame, mut_last_clip.index_of_final_frame),
+            "add-frame".to_string(),
+            50,
+            "alert message from rust".to_string(),
+            "".to_string()
+          );
           mut_last_clip.export(&get_cwd_string(), app_handle_option.clone());
         }
       },
