@@ -11,7 +11,8 @@ pub struct VideoBridge {
   pub origin_clip: VideoClip,
   pub destination_clip: VideoClip,
   pub path_to_generated_frames: String,
-  pub path_to_generated_video: String
+  pub path_to_generated_video: String, 
+  pub bridge_name: String
 }
 
 impl VideoBridge {
@@ -20,7 +21,7 @@ impl VideoBridge {
     let origin_frame_index = origin_clip.index_of_final_frame;
     let destination_frame_index = destination_clip.index_of_start_frame;
     let bridgeName = format!("{}to{}", origin_frame_index, destination_frame_index);
-    let videoName = format!("{}.webm", bridgeName);
+    let videoName = format!("{}", bridgeName);
     let path_to_generated_frames = bridge_frames_path(&origin_clip.path_to_start_frame.clone()).join(bridgeName.clone()).to_str().unwrap().to_string();
     let path_to_generated_video = get_cwd().join(videoName).to_str().unwrap().to_string();
     // let path_to_generated_video = get_cwd(&origin_clip.path_to_start_frame.clone()).join(videoName).to_str().unwrap().to_string();

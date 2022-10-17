@@ -18,9 +18,13 @@
     "vite-plugin-tauri": "^3.0.2"
   },
   "dependencies": {
+    "@types/d3-graphviz": "^2.6.7",
     "autoprefixer": "^9.8.8",
+    "d3": "^7.6.1",
+    "d3-graphviz": "^4.4.0",
     "postcss": "^7.0.39",
     "sass": "^1.55.0",
-    "tailwindcss": "npm:@tailwindcss/postcss7-compat@^2.2.17"
+    "tailwindcss": "npm:@tailwindcss/postcss7-compat@^2.2.17",
+    "vite-plugin-static-copy": "^0.9.0"
   }
 }

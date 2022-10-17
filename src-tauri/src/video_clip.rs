@@ -7,11 +7,13 @@ use crate::{generating_events::{get_frames_string}, tauri_events::notify_status_
 // internal list of clips selected by user by clicking frames
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VideoClip {
+  // basename of the video to be created, can be used as the clip's id
+  // this should be set once when the user selects the final frame of this clip
+  pub video_clip_name: String, 
   pub index_of_start_frame: i32,
   pub path_to_start_frame: String,
   pub index_of_final_frame: i32, 
   pub path_to_final_frame: String,
-  pub video_clip_name: String,
   pub path_to_generated_video: String
 }  // TODO: do i want to impl the generation of video_clip_name etc????
 
