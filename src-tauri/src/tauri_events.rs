@@ -43,13 +43,25 @@ pub struct StatusUpdate {
   error: String
 }
 
-pub fn notify_processing_started(app_handle: tauri::AppHandle, label_of_item: String) {
+pub fn notify_processing(app_handle: tauri::AppHandle, label_of_item: String) {
   notify_status_update_(
     app_handle, 
     "control_panel".to_string(), 
     label_of_item, 
     "processing".to_string(), 
     50, // progress meter ??
+    "".to_string(), // no alert msg
+    "".to_string() // no error msg
+  );
+}
+
+pub fn notify_ready(app_handle: tauri::AppHandle, label_of_item: String) {
+  notify_status_update_(
+    app_handle, 
+    "control_panel".to_string(), 
+    label_of_item, 
+    "ready".to_string(), 
+    100, // progress meter ??
     "".to_string(), // no alert msg
     "".to_string() // no error msg
   );

@@ -2,7 +2,7 @@ use std::{process::Command, path::Path};
 
 use serde::{Serialize, Deserialize};
 
-use crate::{generating_events::{get_frames_string}, tauri_events::{notify_status_update_, notify_processing_started}};
+use crate::{generating_events::{get_frames_string}, tauri_events::{notify_status_update_, notify_processing}};
 
 // internal list of clips selected by user by clicking frames
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -53,7 +53,7 @@ impl VideoClip {
     let dest_dir = dest_dir.to_string();
     let frames_src = format!("{}/{}", get_frames_string(), "frame_%04d.png");
     let output_path = format!("{}\\{}.webm", dest_dir, video_clip_name);
-    notify_processing_started(app_handle_option.clone().unwrap(), video_clip_name);
+    notify_processing(app_handle_option.clone().unwrap(), video_clip_name.clone());
     let cmd = Command::new("cmd")
       .current_dir(std::path::PathBuf::from("C:/ffmpeg"))
       .arg("/C")
@@ -92,15 +92,7 @@ impl VideoClip {
     println!("stderr: {}", String::from_utf8_lossy(&cmd.stderr));
 
     if let Some(app_handle) = app_handle_option {
-      notify_status_update_(
-        app_handle.clone(), 
-        String::from("control_panel"),
-        output_path,
-        String::from("video_clip_exported"),
-        100,
-        String::from(""), 
-        String::from("")
-      );
+      crate::tauri_events::notify_ready(app_handle, video_clip_name);
     } else {
       println!("no app handle but video {} was generated", output_path);
     }
