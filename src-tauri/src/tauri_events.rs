@@ -16,6 +16,17 @@ pub struct ClickFramePayload {
   pub is_start_frame: bool, // whether this is the start frame or end frame for the clip
 }
 
+// notify control panel that a frame has been clicked by user:
+pub fn notify_frame_clicked(app_handle: tauri::AppHandle, frame_payload: ClickFramePayload) { 
+  let destination_window = app_handle.get_window("control_panel").unwrap();
+  destination_window.emit("add-frame", Some(frame_payload)).unwrap();
+}
+
+pub fn notify_clip_added(app_handle: tauri::AppHandle, clip: VideoClip) {
+  let destination_window = app_handle.get_window("control_panel").unwrap();
+  destination_window.emit("add-clip", Some(clip)).unwrap();
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GhostIdlePayload {
   pub clips: Vec<VideoClip>,
@@ -32,11 +43,16 @@ pub struct StatusUpdate {
   error: String
 }
 
-fn notify_clip_added(app_handle: tauri::AppHandle, clip_name: String) {
-  let destination_window = app_handle.get_window("control_panel").unwrap();
-  destination_window.emit("add-clip", r#"{
-    "clip_name": ""#.to_string() + &clip_name + "\"
-  }").unwrap();
+pub fn notify_processing_started(app_handle: tauri::AppHandle, label_of_item: String) {
+  notify_status_update_(
+    app_handle, 
+    "control_panel".to_string(), 
+    label_of_item, 
+    "processing".to_string(), 
+    50, // progress meter ??
+    "".to_string(), // no alert msg
+    "".to_string() // no error msg
+  );
 }
 
 //////////////////////////////////////////////
@@ -189,3 +205,5 @@ pub fn set_clip(app_handle: tauri::AppHandle, click_frame_payload: ClickFramePay
   // }
 }
 
+// node_modules/node.env/api.js:128:17: ERROR: Could not resolve "asyncawait/async"
+// node_modules/node.env/api.js:129:17: ERROR: Could not resolve "asyncawait/await"

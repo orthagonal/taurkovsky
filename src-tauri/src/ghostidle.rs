@@ -12,7 +12,7 @@ use crate::{
     filename, 
     get_cwd_string 
   }, 
-  tauri_events::notify_status_update_, video_bridge::VideoBridge, video_clip::VideoClip
+  tauri_events::{notify_status_update_, notify_clip_added}, video_bridge::VideoBridge, video_clip::VideoClip
 };
 use graphlib::{Graph, VertexId};
 // used for spawning ffmpeg.exe calls in the background:
@@ -39,6 +39,9 @@ impl GhostIdle {
   pub fn add_frame(&mut self, frame: crate::tauri_events::ClickFramePayload, app_handle_option: Option<tauri::AppHandle>) {
     // get last clip
     let last_clip_option = self.graph.fetch(&self.last_clip_index.clone());
+    let notify_frame = frame.clone();
+    // notify control panel a frame was added:
+    crate::tauri_events::notify_frame_clicked(app_handle_option.clone().unwrap(), notify_frame);
     match last_clip_option {
       Some(last_clip) => {
         // if this is the first frame of a new clip:
@@ -48,15 +51,7 @@ impl GhostIdle {
           // if the user selected the final frame for the clip, set it on the last clip added:
           let mut_last_clip = self.graph.fetch_mut(&self.last_clip_index).unwrap();
           mut_last_clip.add_last_frame(frame.index_of_frame, frame.path_to_frame);
-          notify_status_update_(
-            app_handle_option.unwrap().clone(),
-            "control_panel".to_string(),
-            format!("{}thru{}.webm", mut_last_clip.index_of_start_frame, mut_last_clip.index_of_final_frame),
-            "add-frame".to_string(),
-            50,
-            "alert message from rust".to_string(),
-            "".to_string()
-          );
+          notify_clip_added(app_handle_option.clone().unwrap(), mut_last_clip.clone());
           mut_last_clip.export(&get_cwd_string(), app_handle_option.clone());
         }
       },
@@ -90,6 +85,8 @@ impl GhostIdle {
             let mut bridge_map = self.bridges.get_mut(&v1).unwrap();
             // start exporting the bridge right away so it will be ready sooner:
             let bridge = VideoBridge::new(origin_clip.clone(), dest_clip.clone());
+            // notify the frontend that we're starting to export the bridge:
+            // add-bridge
             bridge.export_async(&get_cwd_string(), app_handle_option.clone());
             bridge_map.insert(v2, bridge);
           } else {

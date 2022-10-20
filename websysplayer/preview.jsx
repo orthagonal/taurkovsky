@@ -6,7 +6,7 @@ import { sequenceLinear } from './seq.jsx';
 // listen to notify events
 listen('ghostidle', (event) => {
   console.log('ghostidle', event);
-  alert(JSON.stringify(event));
+  // alert(JSON.stringify(event));
 });
 
 // when graph updates, update graph

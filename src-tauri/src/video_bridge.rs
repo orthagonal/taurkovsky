@@ -11,8 +11,7 @@ pub struct VideoBridge {
   pub origin_clip: VideoClip,
   pub destination_clip: VideoClip,
   pub path_to_generated_frames: String,
-  pub path_to_generated_video: String, 
-  pub bridge_name: String
+  pub path_to_generated_video: String 
 }
 
 impl VideoBridge {

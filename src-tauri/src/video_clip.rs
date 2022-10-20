@@ -2,7 +2,7 @@ use std::{process::Command, path::Path};
 
 use serde::{Serialize, Deserialize};
 
-use crate::{generating_events::{get_frames_string}, tauri_events::notify_status_update_};
+use crate::{generating_events::{get_frames_string}, tauri_events::{notify_status_update_, notify_processing_started}};
 
 // internal list of clips selected by user by clicking frames
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -53,6 +53,7 @@ impl VideoClip {
     let dest_dir = dest_dir.to_string();
     let frames_src = format!("{}/{}", get_frames_string(), "frame_%04d.png");
     let output_path = format!("{}\\{}.webm", dest_dir, video_clip_name);
+    notify_processing_started(app_handle_option.clone().unwrap(), video_clip_name);
     let cmd = Command::new("cmd")
       .current_dir(std::path::PathBuf::from("C:/ffmpeg"))
       .arg("/C")
