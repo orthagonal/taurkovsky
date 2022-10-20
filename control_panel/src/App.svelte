@@ -23,7 +23,7 @@
     delete clipList[name];
   }
 
-  const getClipName = (clip) => `${clip.index_of_start_frame}thru${clip.index_of_final_frame}`;
+  const getClipName = (clip) => clip.video_clip_name;   // should be same as `${clip.index_of_start_frame}thru${clip.index_of_final_frame}`;
   const getBridgeName = (bridge) => `${bridge.origin_clip.video_clip_name}_${bridge.destination_clip.video_clip_name}`;
 
   const onAddClip = (event) => {
@@ -114,6 +114,8 @@
     }
   };
   const onBridgeAdded = (event) => {
+    console.log('bridge ADDED!');
+    console.log(event);
     const payload = event.payload;
     // payload schema:
     // {
@@ -194,7 +196,8 @@
     appWindow.listen('status-update', onStatusUpdate);
     appWindow.listen('add-clip', onAddClip);
     appWindow.listen('add-frame', onAddFrame);
-    // simulate();
+    appWindow.listen('add-bridge', onBridgeAdded);
+    simulate();
   });
 
   const mapStatusToColor = (status) => {

@@ -71,28 +71,32 @@ impl GhostIdle {
     // future versions will change to allow more complicated graph structures though
     for &v1 in self.graph.clone().vertices() {
       for &v2 in self.graph.clone().vertices() {
-        dbg!("&&&&&&&&&&");
         if v1 != v2 {
           let origin_clip = self.graph.fetch(&v1).unwrap();
           let dest_clip = self.graph.fetch(&v2).unwrap();
+          // skip if either clip is incomplete and only has a start frame:
+          if (origin_clip.index_of_final_frame == -1) || (dest_clip.index_of_final_frame == -1) {
+            println!("skipping incomplete clip");
+            continue;
+          }
+          println!("adding edge from {:?} to {:?}", v1, v2);
           dbg!(origin_clip);
           dbg!(dest_clip);
           let start_name = format!("{}{}", origin_clip.video_clip_name, origin_clip.index_of_final_frame);
           let final_name = format!("{}{}", dest_clip.video_clip_name, dest_clip.index_of_start_frame);
           let bridge_video_name = format!("{}-{}", start_name, final_name);
           let start_frame = filename(&origin_clip.path_to_start_frame);
+          // start exporting the bridge right away so it will be ready sooner:
+          let bridge = VideoBridge::new(origin_clip.clone(), dest_clip.clone());
+          // notify the frontend that we're starting to export the bridge:
+          crate::tauri_events::notify_add_bridge(app_handle_option.clone().unwrap(), bridge.clone());
+          bridge.export_async(&get_cwd_string(), app_handle_option.clone());
+          // add the bridge to the hashmap, either the existing hashmap for v1 or a new one:
           if self.bridges.contains_key(&v1) {
             let mut bridge_map = self.bridges.get_mut(&v1).unwrap();
-            // start exporting the bridge right away so it will be ready sooner:
-            let bridge = VideoBridge::new(origin_clip.clone(), dest_clip.clone());
-            // notify the frontend that we're starting to export the bridge:
-            // add-bridge
-            bridge.export_async(&get_cwd_string(), app_handle_option.clone());
             bridge_map.insert(v2, bridge);
           } else {
-            let mut bridge_map = HashMap::<VertexId, VideoBridge>::new();
-            let bridge = VideoBridge::new(origin_clip.clone(), dest_clip.clone());
-            bridge.export_async(&get_cwd_string(), app_handle_option.clone());
+            let mut bridge_map = HashMap::new();
             bridge_map.insert(v2, bridge);
             self.bridges.insert(v1, bridge_map);
           }

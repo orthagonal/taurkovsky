@@ -27,6 +27,11 @@ pub fn notify_clip_added(app_handle: tauri::AppHandle, clip: VideoClip) {
   destination_window.emit("add-clip", Some(clip)).unwrap();
 }
 
+pub fn notify_add_bridge(app_handle: tauri::AppHandle, bridge: VideoBridge) {
+  let destination_window = app_handle.get_window("control_panel").unwrap();
+  destination_window.emit("add-bridge", Some(bridge)).unwrap();
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GhostIdlePayload {
   pub clips: Vec<VideoClip>,

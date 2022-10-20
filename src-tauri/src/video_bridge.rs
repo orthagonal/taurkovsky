@@ -156,15 +156,7 @@ impl VideoBridge {
     println!("stderr: {}", String::from_utf8_lossy(&command.stderr));
     // if there's an app handle, send a message to the frontend
     if let Some(app_handle) = app_handle_option {
-      notify_status_update_(
-        app_handle.clone(), 
-        String::from("control_panel"),
-        label_of_item, 
-        String::from("bridge_video_exported"),
-        100,
-        String::from(""), 
-        String::from("")
-      );
+      crate::tauri_events::notify_ready(app_handle.clone(), label_of_item);
     } else {
       println!("no app handle but bridge video was generated");
     }
@@ -211,15 +203,7 @@ impl VideoBridge {
         println!("stderr: {}", String::from_utf8_lossy(&command.stderr));
         // // if there's an app handle, send a message to the frontend
         if let Some(app_handle) = app_handle_option {
-          notify_status_update_(
-            app_handle.clone(), 
-            String::from("control_panel"),
-            label_of_item, 
-            String::from("bridge_video_exported"),
-            100,
-            String::from(""), 
-            String::from("")
-          );
+          crate::tauri_events::notify_ready(app_handle.clone(), label_of_item);
         } else {
           println!("no app handle but bridge video was generated");
         }
