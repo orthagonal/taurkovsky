@@ -1045,37 +1045,68 @@
   }, currentMonitor: w2, primaryMonitor: M2, availableMonitors: W });
 
   // index.jsx
-  var makeAllWorkingDirs = async (sourcePath) => {
+  var getRootDir = async () => {
     const dir = await o6();
+    return dir;
+  };
+  var init = async () => {
+    let dir = await getRootDir();
+    let selected;
+    const dirList = await u4(dir);
+    if (dirList.length === 0) {
+      selected = await userSelectVideo();
+      const workingDir2 = await makeAllWorkingDirs(selected);
+      r2("set_working_dir", { workingDir: workingDir2 });
+      const result = await r2("framify_video_src", { srcVideoName: selected });
+      await displayThumbsDir(await R(workingDir2, "thumbs"));
+    } else {
+      workingDir = dirList[0].path;
+      r2("set_working_dir", { workingDir });
+      await displayThumbsDir(await R(workingDir, "thumbs"));
+    }
+  };
+  var getWorkingDir = async (sourcePath) => {
+    const dir = await getRootDir();
     const extension = await B(sourcePath);
     const fileStemName = (await C(sourcePath)).replace(`.${extension}`, "");
-    const workingDir = await R(dir, fileStemName);
-    await c2(workingDir, { recursive: true });
-    await c2(await R(workingDir, "frames"), { recursive: true });
-    await c2(await R(workingDir, "bridge_frames"), { recursive: true });
-    await c2(await R(workingDir, "bridge_video"), { recursive: true });
-    r2("set_working_dir", {
-      workingDir
-    });
-    return workingDir;
+    const workingDir2 = await R(dir, fileStemName);
+    return workingDir2;
   };
-  var displayFrameDir = async (sourcePath) => {
-    console.log("displayFrameDir", sourcePath);
+  var makeAllWorkingDirs = async (sourcePath) => {
+    const workingDir2 = await getWorkingDir(sourcePath);
+    await c2(workingDir2, { recursive: true });
+    await c2(await R(workingDir2, "frames"), { recursive: true });
+    await c2(await R(workingDir2, "thumbs"), { recursive: true });
+    await c2(await R(workingDir2, "bridge_frames"), { recursive: true });
+    await c2(await R(workingDir2, "bridge_video"), { recursive: true });
+    return workingDir2;
+  };
+  var displayThumbsDir = async (sourcePath) => {
+    console.log("displayThumbsDir", sourcePath);
     let isStartFrame = true;
     const frameEntries = await u4(sourcePath);
     console.log("frameEntries", frameEntries);
+    if (frameEntries.length === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 5e3));
+      return displayThumbsDir(sourcePath);
+    }
     const videoFrameList = document.getElementById("video-frame-list");
     for (let i3 = 0; i3 < frameEntries.length; i3++) {
       const frameEntry = frameEntries[i3];
-      const frameEl = document.createElement("img");
-      frameEl.src = await c(frameEntry.path);
-      frameEl.realPath = frameEntry.path;
-      frameEl.class = "video-frame";
-      frameEl.width = 35;
-      frameEl.height = 35;
-      frameEl.style.margin = "10px";
+      const frameEl = document.createElement("div");
+      frameEl.innerHTML = `<span class="text-xs font-bold text-slate-200">${i3}</span>
+      <img 
+        src=${c(await R(sourcePath, frameEntry.name))} 
+        class="video-frame m-1"
+        width="35"
+        height="35"
+      />`;
+      frameEl.realPath = frameEntry.path.replace("thumbs", "frames");
+      frameEl.frameIndex = i3;
+      console.log("frameEl", frameEl);
       frameEl.addEventListener("click", (event) => {
         m2.emit("click", {
+          index_of_frame: frameEl.frameIndex,
           path_to_frame: frameEl.realPath,
           is_start_frame: isStartFrame
         });
@@ -1084,22 +1115,12 @@
       videoFrameList.appendChild(frameEl);
     }
   };
-  var f4 = async () => {
-    const selected = await e2({
-      multiple: false,
-      filters: [{
-        name: "Video",
-        extensions: ["mov", "webm"]
-      }]
-    });
-    if (selected === null) {
-    } else {
-      const workingDir = await makeAllWorkingDirs(selected);
-      const result = await r2("framify_video_src", {
-        srcVideoName: selected
-      });
-      await displayFrameDir(await R(workingDir, "frames"));
-    }
-  };
-  f4();
+  var userSelectVideo = () => e2({
+    multiple: false,
+    filters: [{
+      name: "Video",
+      extensions: ["mov", "webm"]
+    }]
+  });
+  init();
 })();

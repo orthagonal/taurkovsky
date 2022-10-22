@@ -4,16 +4,23 @@
   import { appWindow, WebviewWindow } from '@tauri-apps/api/window'
   import { listen , emit } from '@tauri-apps/api/event';
   import { onMount } from 'svelte';
-  import Svelvet from 'svelvet';
-  // import * as d3 from 'd3';
-  // import { graphviz } from "d3-graphviz"; // graphviz js layer
-  // import { wasmFolder } from "@hpcc-js/wasm"; // there is a WASM version of c++ graphviz in here :-) 
-  // wasmFolder("/"); // call into the wasm to set the path
+  import { DataSet } from "vis-data/peer";
+  import { Network } from "vis-network/peer";
+  // import "vis-network/styles/vis-network.css";
+
+  // just do graphviz for now
+  // don't worry about frame preview
+  import * as d3 from 'd3';
+  import { graphviz } from "d3-graphviz"; // graphviz js layer
+  import { wasmFolder } from "@hpcc-js/wasm"; // there is a WASM version of c++ graphviz in here :-) 
+  wasmFolder("/"); // call into the wasm to set the path
   import './global.scss';
 
   let statusList = {}; // List of all the status of the different services
   let clipList = {}; // <index_of_start_frame>thru<end_of_final_frame> -> VideoClip object
   let bridges = {}; // <index_of_origin_frame> -> VideoBridge object
+  // flash message that gives feedback to user on events
+  let FlashMessage = "Launched...";
 
 
   const removeStatus = (name) => {
@@ -23,9 +30,29 @@
     delete clipList[name];
   }
 
+  /*
+     HELPER FUNCTIONS FOR DISPLAYING CLIP AND BRIDGE STATUSES
+  */
   const getClipName = (clip) => clip.video_clip_name;   // should be same as `${clip.index_of_start_frame}thru${clip.index_of_final_frame}`;
   const getBridgeName = (bridge) => `${bridge.origin_clip.video_clip_name}_${bridge.destination_clip.video_clip_name}`;
+  const StatusColorMap = {
+    "added": "gray",
+    "processing": "blue",
+    "ready": "green",
+    "error": "red",
+  }
+  const TailwindColors = {
+    "added": "bg-gray-500",
+    "processing": "bg-blue-500",
+    "ready": "bg-green-500",
+    "error": "bg-red-500",
+  }
+  const mapStatusToColor = (status) => StatusColorMap[status] || "gray";
+  const mapStatusToTailwindColor = (status) => TailwindColors[status] || "bg-gray-500";
 
+  /*
+    TAURI EVENT HANDLERS
+  */
   const onAddClip = (event) => {
     console.log('clip ADDED!')
     console.log(event);
@@ -42,77 +69,9 @@
     clipList[payload.video_clip_name] = payload;
     statusList[payload.video_clip_name] = "added";
     addNode(payload);
+    updateDisplay();
   };
 
-  const onPlayStarted = (event) => {
-    const { payload } = event;
-    // payload schema:
-    // {
-    //   finished_type: "clip",
-    //   finished: labelname of video that just stopped playing
-    //   started: labelname of video that started
-    //   started_type: "bridge"
-    // }
-    // turn off old one:
-    if (payload.finished_type === "clip") {
-      const n = nodes.find(n => n.id === payload.finished)
-      n.borderColor = 'gray';
-      n.bgColor = 'green';
-      n.textColor = 'gray';
-      n.width = 100;
-      n.height = 100;
-      nodes = nodes;
-    } else {
-      const b = edges.find(b => b.id === payload.finished);
-      if (b) {
-        b.animate = false;
-        b.edgeColor = 'green';
-        edges = edges;
-      }
-    }
-    // turn on new one
-    if (payload.started_type === "clip") {
-      const n = nodes.find(n => n.id === payload.started)
-      n.borderColor = 'blue';
-      n.textColor = 'blue';
-      n.bgColor = '#AAFF00';
-      n.width = 125;
-      n.height = 125;
-      nodes = nodes;
-    } else {
-      const b = edges.find(b => b.id === payload.started);
-      if (b) {
-        b.animate = true;
-        b.edgeColor = '#097969';
-        edges = edges;
-      }
-    }
-
-  };
-  const onStatusUpdate = (event) => {
-    const { payload } = event;
-    // payload schema:
-    // {
-    //     label_of_item: "43thru102",
-    //     status_of_item: "processing",
-    //     progress_percent: 50,
-    //     alert_message: "",
-    //     error: ""
-    // }
-    statusList[payload.label_of_item] = payload.status_of_item;
-    // see if it's a node or a bridge:
-    const n = nodes.find(n => n.id === payload.label_of_item)
-    if (n) {
-      n.bgColor = mapStatusToColor(payload.status_of_item);
-      nodes = nodes;
-    } else {
-      const b = edges.find(b => b.id === payload.label_of_item);
-      if (b) {
-        b.edgeColor = mapStatusToColor(payload.status_of_item);
-        edges = edges;
-      }
-    }
-  };
   const onBridgeAdded = (event) => {
     console.log('bridge ADDED!');
     console.log(event);
@@ -128,10 +87,63 @@
     statusList[getBridgeName(payload)] = 'added';
     console.log('add edge', payload);
     addEdge(payload);
+    updateDisplay();
   };
 
-  // flash message that gives feedback to user on events
-  let FlashMessage = "Launched...";
+  const onPlayStarted = (event) => {
+    const { payload } = event;
+    // payload schema:
+    // {
+    //   finished_type: "clip",
+    //   finished: labelname of video that just stopped playing
+    //   started: labelname of video that started
+    //   started_type: "bridge"
+    // }
+    // turn off old one:
+    if (payload.finished_type === "clip") {
+      // set to deactive node
+    } else {
+      // const b = edges.find(b => b.id === payload.finished);
+      // if (b) {
+        // set to deactive edge
+      // }
+    }
+    // turn on new one
+    if (payload.started_type === "clip") {
+      // set to active node
+    } else {
+      // const b = edges.find(b => b.id === payload.started);
+      // if (b) {
+      //   // set to active edge
+      // }
+    }
+  };
+
+  const onStatusUpdate = (event) => {
+    const { payload } = event;
+    // payload schema:
+    // {
+    //     label_of_item: "43thru102",
+    //     status_of_item: "processing",
+    //     progress_percent: 50,
+    //     alert_message: "",
+    //     error: ""
+    // }
+    statusList[payload.label_of_item] = payload.status_of_item;
+    // see if it's a node or a bridge:
+    // const n = nodes.find(n => n.id === payload.label_of_item)
+    // if (n) {
+    //   n.bgColor = mapStatusToColor(payload.status_of_item);
+    //   nodes = nodes;
+    // } else {
+    //   const b = edges.find(b => b.id === payload.label_of_item);
+    //   if (b) {
+    //     b.edgeColor = mapStatusToColor(payload.status_of_item);
+    //     edges = edges;
+    //   }
+    // }
+  };
+
   const onAddFrame = (event) => {
     console.log('frame clicked', event);
     const { payload } = event;
@@ -144,93 +156,67 @@
     FlashMessage = "Frame clicked: " + payload.path_to_frame;
   };
 
-  let curPos = { x: 0, y: 0 };
-  const nextPos = () => {
-    curPos.x += 100;
-    if (curPos.x > 1000) {
-      curPos.x = 0;
-      curPos.y += 100;
-    }
-    return Object.assign({}, curPos);
+  /*
+    GRAPH DISPLAY FUNCTIONS
+  */
+
+  // clip name -> clip object:
+  let nodes = {};
+  // bridge name -> bridge object:
+  let edges = {};
+
+  const addNode = clip => {
+    const name = getClipName(clip);
+    clip.status = 'added';
+    nodes[name] = clip; 
   };
 
-  // id will be the clip name:
-  const makeNode = (clip) => ({ 
-    id: getClipName(clip),
-    position: nextPos(),
-    width: 100,
-  	height: 100,
-    data: { label: getClipName(clip) },
-    bgColor: mapStatusToColor("added"),
-    borderColor: 'gray',
-    borderRadius: 50
-  });
-  const makeEdge = (bridge) => ({ 
-    id: getBridgeName(bridge),
-    source: getClipName(bridge.origin_clip), 
-    target: getClipName(bridge.destination_clip),
-    arrow: true,
-    animate: false, // only animate when playing
-    label: getBridgeName(bridge),
-    edgeColor: mapStatusToColor("added")
-  });
-  let nodes = [];
-  let edges = [];
-  const addNode = (clip) => {
-    nodes.push(makeNode(clip));
-    nodes = nodes; // tells svelte that nodes has changed
-  }
-  const removeNode = (clip) => {
-    const index = nodes.findIndex(node => node.id === clip.video_clip_name);
-    nodes.splice(index, 1);
+  const addEdge = bridge => {
+    const name = getBridgeName(bridge);
+    bridge.status = 'added';
+    edges[name] = bridge;
   };
-  const addEdge = (bridge) => {
-    edges.push(makeEdge(bridge));
-    edges = edges;
+
+  // renders node as dot string:
+  const makeNodeFromClip = clip => {
+    const name = getClipName(clip);  
+    return `"${name}" [label="${name}"]`
   }
-  const removeEdge = (bridge) => {
-    const index = edges.findIndex(edge => edge.source === bridge.source_clip.video_clip_name && edge.target === bridge.destination_clip.video_clip_name);
-    edges.splice(index, 1);
-  };
+  const makeEdgeFromBridge = bridge => {
+    const source = getClipName(bridge.origin_clip);
+    const target = getClipName(bridge.destination_clip);
+    return `"${source}" -> "${target}"`;
+  }
+
+
+  const updateDisplay = () => {
+      // generate node and edge strings:    
+      const dot = `
+        digraph {
+          ${Object.values(nodes).map(makeNodeFromClip).join('\n')}
+          ${Object.values(edges).map(makeEdgeFromBridge).join('\n')}
+        }
+      `;
+      console.log(dot);
+      graphviz("#graph-container")
+        // TODO: HAVE TO ADD ALL OF THE FRAMES TO THE GRAPHVIZ OBJECT
+        // .addImage("icons/icon1.svg","300px","300px")
+        // .addImage("icons/icon2.svg","300px","300px")
+        .renderDot(dot);
+    };
+
+
   onMount(async () => {
     appWindow.listen('status-update', onStatusUpdate);
     appWindow.listen('add-clip', onAddClip);
     appWindow.listen('add-frame', onAddFrame);
     appWindow.listen('add-bridge', onBridgeAdded);
+    const container =  document.getElementById("sigma-container");
     simulate();
   });
 
-  const mapStatusToColor = (status) => {
-    switch (status) {
-      case "added":
-        return "blue";
-      case "processing":
-        return "yellow";
-      case "ready":
-        return "green";
-      case "error":
-        return "red";
-      default:
-        return "gray";
-    }
-  };
-
-  const mapStatusToTailwindColor = (status) => {
-    switch (status) {
-      case "added":
-        return "bg-blue-500";
-      case "processing":
-        return "bg-yellow-500 blink";
-      case "error":
-        return "bg-red-500";
-      case "ready":
-        return "bg-green-500";
-      default:
-        return "bg-gray-500";
-    }
-  }
-
-
+  // simulates a bunch of events coming from tauri
+  // to test the UI
   const simulate = async => {
     let playing = 0;
     let prev = 0;
@@ -397,6 +383,13 @@
 </script>
 
 <style>
+  #graph-container {
+    width: 500px;
+    height: 500px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
 </style>
 
 <main>
@@ -420,9 +413,8 @@
     </li>
     {/each}
   </ul>
+  <div id="graph-container"></div>
 
-
-  <Svelvet nodes={nodes} edges={edges} background={true} />
 </main>
 
 

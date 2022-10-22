@@ -706,21 +706,29 @@
   }
   var a2 = Object.freeze({ __proto__: null, listen: e, once: u2, emit: s3 });
 
+  // seq.jsx
+  var seq_curVideoIndex = 0;
+  function sequenceLinear(videoSources2, curVideoIndex = seq_curVideoIndex) {
+    seq_curVideoIndex++;
+    if (seq_curVideoIndex >= videoSources2.length) {
+      seq_curVideoIndex = 0;
+    }
+    return videoSources2[seq_curVideoIndex];
+  }
+
   // preview.jsx
+  e("ghostidle", (event) => {
+    console.log("ghostidle", event);
+  });
   var videoA = void 0;
   var videoB = void 0;
   var started = false;
   var videoSources = [];
-  var curVideoIndex = 0;
   var nextVideo = (curVideo) => {
-    curVideoIndex++;
-    if (curVideoIndex >= videoSources.length) {
-      curVideoIndex = 0;
-    }
-    curVideo.src = videoSources[curVideoIndex];
+    curVideo.src = sequenceLinear(videoSources);
   };
-  m.listen("video-ready", (event) => {
-    const newSource = event.payload.message;
+  m.listen("status-update", (event) => {
+    const newSource = event.payload.label_of_item;
     if (!videoSources.includes(newSource)) {
       videoSources.push(c(newSource));
     }
@@ -731,9 +739,12 @@
       videoB.style.display = "none";
       videoA.style.display = "block";
       videoA.onended = function(e2) {
+        console.time();
         videoB.play();
+        console.timeLog();
         videoA.style.display = "none";
         videoB.style.display = "block";
+        console.timeLog();
         nextVideo(videoA);
       };
       videoB.onended = function(e2) {
