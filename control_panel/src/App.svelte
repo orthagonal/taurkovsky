@@ -40,6 +40,7 @@
     "processing": "blue",
     "ready": "green",
     "error": "red",
+    "playing": "yellow",
   }
   const TailwindColors = {
     "added": "bg-gray-500",
@@ -100,22 +101,18 @@
     //   started_type: "bridge"
     // }
     // turn off old one:
-    if (payload.finished_type === "clip") {
-      // set to deactive node
-    } else {
-      // const b = edges.find(b => b.id === payload.finished);
-      // if (b) {
-        // set to deactive edge
-      // }
-    }
-    // turn on new one
-    if (payload.started_type === "clip") {
-      // set to active node
-    } else {
-      // const b = edges.find(b => b.id === payload.started);
-      // if (b) {
-      //   // set to active edge
-      // }
+    try {
+      const previous = nodes[payload.finished] || edges[payload.finished];
+      previous.status = "ready";
+      // turn on new one
+      const next = nodes[payload.started] || edges[payload.started];
+      next.status = "playing";
+      updateDisplay();
+    } catch (error) {
+      console.log('>>>>>>>>>>>>>>>>>>>>error in onPlayStarted', error);
+      console.log(nodes)
+      console.log(edges)
+      console.log(payload)        
     }
   };
 
@@ -131,17 +128,9 @@
     // }
     statusList[payload.label_of_item] = payload.status_of_item;
     // see if it's a node or a bridge:
-    // const n = nodes.find(n => n.id === payload.label_of_item)
-    // if (n) {
-    //   n.bgColor = mapStatusToColor(payload.status_of_item);
-    //   nodes = nodes;
-    // } else {
-    //   const b = edges.find(b => b.id === payload.label_of_item);
-    //   if (b) {
-    //     b.edgeColor = mapStatusToColor(payload.status_of_item);
-    //     edges = edges;
-    //   }
-    // }
+    const toUpdate = nodes[payload.label_of_item] || edges[payload.label_of_item];
+    toUpdate.status = payload.status_of_item;
+    updateDisplay();
   };
 
   const onAddFrame = (event) => {
@@ -180,12 +169,14 @@
   // renders node as dot string:
   const makeNodeFromClip = clip => {
     const name = getClipName(clip);  
-    return `"${name}" [label="${name}"]`
+    const color = mapStatusToColor(clip.status);
+    return `"${name}" [label="${name}", fillcolor="${color}", style="filled"]`;
   }
   const makeEdgeFromBridge = bridge => {
     const source = getClipName(bridge.origin_clip);
     const target = getClipName(bridge.destination_clip);
-    return `"${source}" -> "${target}"`;
+    const color = mapStatusToColor(bridge.status);
+    return `"${source}" -> "${target}" [label="${getBridgeName(bridge)}", color="${color}"]`;
   }
 
 
@@ -224,7 +215,7 @@
     const updatePlaying = () => {
       prev = playing;
       playing = (playing + 1) % vids.length;
-      onPlayStarted({
+       onPlayStarted({
         payload: {
           started: vids[playing],
           started_type: playing == 0 || playing % 2 == 0 ? 'clip' : 'bridge',
