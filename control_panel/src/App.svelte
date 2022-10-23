@@ -100,8 +100,8 @@
     //   started: labelname of video that started
     //   started_type: "bridge"
     // }
-    // turn off old one:
     try {
+      // turn off old one 
       const previous = nodes[payload.finished] || edges[payload.finished];
       previous.status = "ready";
       // turn on new one
@@ -153,24 +153,38 @@
   let nodes = {};
   // bridge name -> bridge object:
   let edges = {};
+  // images (list of images that need to be addImage'd to graphviz)
+  let images = [];
 
   const addNode = clip => {
     const name = getClipName(clip);
     clip.status = 'added';
-    nodes[name] = clip; 
+    nodes[name] = clip;
+    let image = convertFileSrc(clip.path_to_start_frame);
+    if (!images.includes(image)) {
+      // images.push(image);
+    }
   };
 
   const addEdge = bridge => {
     const name = getBridgeName(bridge);
     bridge.status = 'added';
     edges[name] = bridge;
+    let image = convertFileSrc(bridge.origin_clip.path_to_final_frame);
+    if (!images.includes(image)) {
+      // images.push(image);
+    }
   };
 
   // renders node as dot string:
   const makeNodeFromClip = clip => {
     const name = getClipName(clip);  
     const color = mapStatusToColor(clip.status);
-    return `"${name}" [label="${name}", fillcolor="${color}", style="filled"]`;
+    const image = convertFileSrc(clip.path_to_start_frame);// for tauri need this: convertFileSrc(clip.path_to_start_frame);
+    console.log('image', image);
+    // , style="filled"
+    // image="${image}",
+    return `"${name}" [label="${name}",  color="${color}"]`;
   }
   const makeEdgeFromBridge = bridge => {
     const source = getClipName(bridge.origin_clip);
@@ -179,23 +193,22 @@
     return `"${source}" -> "${target}" [label="${getBridgeName(bridge)}", color="${color}"]`;
   }
 
-
+  // updates the graph visualization, must be called very time 
+  // a change or status changes in the graph
   const updateDisplay = () => {
-      // generate node and edge strings:    
-      const dot = `
-        digraph {
-          ${Object.values(nodes).map(makeNodeFromClip).join('\n')}
-          ${Object.values(edges).map(makeEdgeFromBridge).join('\n')}
-        }
-      `;
-      console.log(dot);
-      graphviz("#graph-container")
-        // TODO: HAVE TO ADD ALL OF THE FRAMES TO THE GRAPHVIZ OBJECT
-        // .addImage("icons/icon1.svg","300px","300px")
-        // .addImage("icons/icon2.svg","300px","300px")
-        .renderDot(dot);
-    };
-
+    // generate node and edge strings:    
+    const dot = `
+      digraph {
+        ${Object.values(nodes).map(makeNodeFromClip).join('\n')}
+        ${Object.values(edges).map(makeEdgeFromBridge).join('\n')}
+      }
+    `;
+    const viz = graphviz("#graph-container")
+    images.map(i => {
+      viz.addImage(i, "300px", "300px");
+    });
+    viz.renderDot(dot);
+  };
 
   onMount(async () => {
     appWindow.listen('status-update', onStatusUpdate);
