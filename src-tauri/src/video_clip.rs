@@ -24,6 +24,7 @@ impl VideoClip {
     index_of_final_frame: i32, 
     path_to_final_frame: String
   ) -> VideoClip {
+
     VideoClip {
       index_of_start_frame,
       path_to_start_frame: path_to_start_frame.clone(),
@@ -39,7 +40,8 @@ impl VideoClip {
   pub fn add_last_frame(&mut self, index_of_final_frame: i32, path_to_final_frame: String) {
     self.index_of_final_frame = index_of_final_frame;
     self.path_to_final_frame = path_to_final_frame;
-    self.video_clip_name = format!("{}thru{}", self.index_of_start_frame, self.index_of_final_frame)
+    self.video_clip_name = format!("{}thru{}", self.index_of_start_frame, self.index_of_final_frame);
+    self.path_to_generated_video = crate::generating_events::get_cwd().join(&self.video_clip_name).with_extension("webm").to_str().unwrap().to_string();
   }
 
   // export clips as webm video:

@@ -21,8 +21,8 @@ pub fn get_frames_path() -> PathBuf { get_cwd().join("frames") }
 pub fn get_frames_string() -> String { get_frames_path().to_str().unwrap().to_string() }
 
 // bridge exporting will need to be revisited:
-pub fn bridge_frames_path(source_video_name: &str) -> PathBuf { get_cwd().join("bridge_frames") }
-pub fn bridge_video_path(source_video_name: &str) -> PathBuf { get_cwd().join("bridge_video") }
+pub fn bridge_frames_path(source_video_name: &str) -> PathBuf { get_cwd().join("bridge_frames").join(source_video_name) }
+pub fn bridge_video_path(source_video_name: &str) -> PathBuf { get_cwd().join("bridge_video").join(source_video_name) }
 pub fn bridge_frames_string(source_video_name: &str) -> String { bridge_frames_path(source_video_name).to_str().unwrap().to_string() }
 pub fn bridge_video_string(source_video_name: &str) -> String { bridge_video_path(source_video_name).to_str().unwrap().to_string() }
 

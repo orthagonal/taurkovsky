@@ -90,7 +90,8 @@ impl GhostIdle {
           let bridge = VideoBridge::new(origin_clip.clone(), dest_clip.clone());
           // notify the frontend that we're starting to export the bridge:
           crate::tauri_events::notify_add_bridge(app_handle_option.clone().unwrap(), bridge.clone());
-          bridge.export_async(&get_cwd_string(), app_handle_option.clone());
+          // bridge.export_async(&get_cwd_string(), app_handle_option.clone());
+          bridge.export(&get_cwd_string(), app_handle_option.clone());
           // add the bridge to the hashmap, either the existing hashmap for v1 or a new one:
           if self.bridges.contains_key(&v1) {
             let mut bridge_map = self.bridges.get_mut(&v1).unwrap();
@@ -103,9 +104,6 @@ impl GhostIdle {
         }
       }
     }
-  }
-
-  pub fn save_to_disk(&mut self) {
   }
 
   // serialize the ghostidle graph and send to front end:

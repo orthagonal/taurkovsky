@@ -17,6 +17,21 @@ pub mod video_clip;
 pub mod video_bridge;
 pub mod test_ghostidle;
 
+// simple relay from preview -> control_panel when videos start playing
+#[tauri::command]
+fn preview_video_started(app_handle: tauri::AppHandle, label_of_item: String) {
+  println!(">>>>>>>>preview_video_started: {:?}", label_of_item);
+  notify_status_update_(
+    app_handle, 
+    "control_panel".to_string(), 
+    label_of_item.to_string(), 
+    "playing".to_string(), 
+    0,
+    "".to_string(),
+    "".to_string()
+  )
+}
+
 #[tauri::command]
 fn set_working_dir(working_dir: &str) {
   dbg!(working_dir);
@@ -41,7 +56,11 @@ pub fn notify() {
 
 fn main() {
   tauri::Builder::default()
-  .invoke_handler(tauri::generate_handler![framify_video_src, set_working_dir])
+  .invoke_handler(tauri::generate_handler![
+    framify_video_src, 
+    set_working_dir,
+    preview_video_started
+  ])
   .setup(|app| {
     let ghostidle_arc = Arc::new(Mutex::new(GhostIdle::new()));
     let main_window = app.get_window("main").unwrap();

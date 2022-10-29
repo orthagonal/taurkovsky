@@ -23,13 +23,17 @@ pub fn notify_frame_clicked(app_handle: tauri::AppHandle, frame_payload: ClickFr
 }
 
 pub fn notify_clip_added(app_handle: tauri::AppHandle, clip: VideoClip) {
-  let destination_window = app_handle.get_window("control_panel").unwrap();
-  destination_window.emit("add-clip", Some(clip)).unwrap();
+  let control_panel = app_handle.get_window("control_panel").unwrap();
+  let preview_window = app_handle.get_window("preview").unwrap();
+  control_panel.emit("add-clip", Some(clip.clone())).unwrap();
+  preview_window.emit("add-clip", Some(clip)).unwrap();
 }
 
 pub fn notify_add_bridge(app_handle: tauri::AppHandle, bridge: VideoBridge) {
-  let destination_window = app_handle.get_window("control_panel").unwrap();
-  destination_window.emit("add-bridge", Some(bridge)).unwrap();
+  let control_panel = app_handle.get_window("control_panel").unwrap();
+  let preview_window = app_handle.get_window("preview").unwrap();
+  control_panel.emit("add-bridge", Some(bridge.clone())).unwrap();
+  preview_window.emit("add-bridge", Some(bridge)).unwrap();
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -62,8 +66,17 @@ pub fn notify_processing(app_handle: tauri::AppHandle, label_of_item: String) {
 
 pub fn notify_ready(app_handle: tauri::AppHandle, label_of_item: String) {
   notify_status_update_(
-    app_handle, 
+    app_handle.clone(), 
     "control_panel".to_string(), 
+    label_of_item.clone(), 
+    "ready".to_string(), 
+    100, // progress meter ??
+    "".to_string(), // no alert msg
+    "".to_string() // no error msg
+  );
+  notify_status_update_(
+    app_handle, 
+    "preview".to_string(), 
     label_of_item, 
     "ready".to_string(), 
     100, // progress meter ??

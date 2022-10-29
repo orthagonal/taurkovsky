@@ -73,7 +73,7 @@
     updateDisplay();
   };
 
-  const onBridgeAdded = (event) => {
+  const onAddBridge = (event) => {
     console.log('bridge ADDED!');
     console.log(event);
     const payload = event.payload;
@@ -85,7 +85,7 @@
     //   path_to_generated_video: ""
     // }
     bridges[payload.label_of_item] = payload;
-    statusList[getBridgeName(payload)] = 'added';
+    statusList[payload.label_of_item] = 'added';
     console.log('add edge', payload);
     addEdge(payload);
     updateDisplay();
@@ -116,6 +116,8 @@
     }
   };
 
+  let currentPlayingNodeOrEdge = null;
+
   const onStatusUpdate = (event) => {
     const { payload } = event;
     // payload schema:
@@ -126,6 +128,13 @@
     //     alert_message: "",
     //     error: ""
     // }
+    console.log('status update', payload);
+    if (payload.status_of_item === "playing") {
+      if (currentPlayingNodeOrEdge) {
+        currentPlayingNodeOrEdge.status = "ready";
+      }
+      currentPlayingNodeOrEdge = nodes[payload.label_of_item] || edges[payload.label_of_item];
+    }
     statusList[payload.label_of_item] = payload.status_of_item;
     // see if it's a node or a bridge:
     const toUpdate = nodes[payload.label_of_item] || edges[payload.label_of_item];
@@ -167,7 +176,7 @@
   };
 
   const addEdge = bridge => {
-    const name = getBridgeName(bridge);
+    const name = bridge.label_of_item;//getBridgeName(bridge);
     bridge.status = 'added';
     edges[name] = bridge;
     let image = convertFileSrc(bridge.origin_clip.path_to_final_frame);
@@ -214,13 +223,13 @@
     appWindow.listen('status-update', onStatusUpdate);
     appWindow.listen('add-clip', onAddClip);
     appWindow.listen('add-frame', onAddFrame);
-    appWindow.listen('add-bridge', onBridgeAdded);
+    appWindow.listen('add-bridge', onAddBridge);
     const container =  document.getElementById("sigma-container");
-    simulate();
+    // simulate();
   });
 
   // simulates a bunch of events coming from tauri
-  // to test the UI
+  // to test the UI, svelte will remove if not referenced:
   const simulate = async => {
     let playing = 0;
     let prev = 0;
@@ -357,8 +366,8 @@
       onAddFrame({ payload: sampleFrames[202] });
       onAddClip({ payload: sampleClips[142_202] });
       // creating a second clip also creates bridges between that clip and all other clips:
-      onBridgeAdded({ payload: sampleBridge['142thru202_43thru102'] });
-      onBridgeAdded({ payload: sampleBridge['43thru102_142thru202'] });
+      onAddBridge({ payload: sampleBridge['142thru202_43thru102'] });
+      onAddBridge({ payload: sampleBridge['43thru102_142thru202'] });
       sampleUpdates['43thru102'].status_of_item = 'ready';
       onStatusUpdate({ payload: sampleUpdates['43thru102'] });
       sampleUpdates['142thru202'].status_of_item = 'processing';
@@ -387,9 +396,9 @@
 </script>
 
 <style>
-  #graph-container {
-    width: 500px;
-    height: 500px;
+  #graph-container { 
+    width: 1080px;
+    height: 760px;
     margin: 0;
     padding: 0;
     overflow: hidden;

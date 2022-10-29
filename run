@@ -3,8 +3,9 @@ npm run build_es
 npx tailwindcss -i ./app.css -o ../ui/compiled_app.css
 cd ../control_panel
 npm run build
-rm -rf ../ui/assets
-mv dist/assets ../ui
+rm -rf ../ui/assets/* 
+cp -f dist/assets/* ../ui/assets/
+cp dist/*.wasm ../ui
 cp -f dist/index.html ../ui/control_panel.html
 cd ..
 npm run tauri dev
