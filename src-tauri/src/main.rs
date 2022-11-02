@@ -15,7 +15,7 @@ mod tauri_events;
 pub mod ghostidle;
 pub mod video_clip;
 pub mod video_bridge;
-pub mod test_ghostidle;
+// pub mod test_ghostidle;
 
 // simple relay from preview -> control_panel when videos start playing
 #[tauri::command]

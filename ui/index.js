@@ -1103,7 +1103,6 @@
       />`;
       frameEl.realPath = frameEntry.path.replace("thumbs", "frames");
       frameEl.frameIndex = i3;
-      console.log("frameEl", frameEl);
       frameEl.addEventListener("click", (event) => {
         m2.emit("click", {
           index_of_frame: frameEl.frameIndex,
@@ -1111,6 +1110,29 @@
           is_start_frame: isStartFrame
         });
         isStartFrame = !isStartFrame;
+      });
+      frameEl.addEventListener("mouseover", (event) => {
+        console.log("enter", event);
+        event.target.style.border = "1px solid red";
+        event.target.width = "250";
+        event.target.height = "250";
+      });
+      frameEl.addEventListener("mouseout", (event) => {
+        console.log("exit", event);
+        event.target.style.border = "";
+        event.target.width = "35";
+        event.target.height = "35";
+      });
+      frameEl.addEventListener("mousewheel", (event) => {
+        console.log("mousewheel", event);
+        if (event.wheelDelta < 0) {
+          event.target.width = (parseInt(event.target.width) - 30).toString();
+          event.target.height = (parseInt(event.target.height) - 30).toString();
+        }
+        if (event.wheelDelta > 0) {
+          event.target.width = (parseInt(event.target.width) + 30).toString();
+          event.target.height = (parseInt(event.target.height) + 30).toString();
+        }
       });
       videoFrameList.appendChild(frameEl);
     }

@@ -84,7 +84,7 @@ const displayThumbsDir = async (sourcePath) => {
       />`;
     frameEl.realPath = frameEntry.path.replace('thumbs', 'frames'); // the corresponding full-size frame is in the frames directory
     frameEl.frameIndex = i;
-    console.log('frameEl', frameEl);
+    
     frameEl.addEventListener('click', (event) => {
       // todo: colorize the frame if it's start frame
       // colorize the first+last frame and every frame in between
@@ -95,6 +95,34 @@ const displayThumbsDir = async (sourcePath) => {
       });
       isStartFrame = !isStartFrame;
     });
+
+    frameEl.addEventListener('mouseover', (event) => {
+      console.log('enter', event);
+      // when they enter show the full size frame
+      event.target.style.border = '1px solid red';
+      event.target.width = '250';
+      event.target.height = '250';
+    });
+
+    frameEl.addEventListener('mouseout', (event) => {
+      console.log('exit', event);
+      // when they exit show the full size frame
+      event.target.style.border = '';
+      event.target.width = '35';
+      event.target.height = '35';
+    });
+    frameEl.addEventListener('mousewheel', (event) => {
+      console.log('mousewheel', event);
+      if (event.wheelDelta < 0) {
+        event.target.width = (parseInt(event.target.width) - 30).toString();
+        event.target.height = (parseInt(event.target.height) - 30).toString();
+      }
+      if (event.wheelDelta > 0) {
+        event.target.width = (parseInt(event.target.width) + 30).toString();
+        event.target.height = (parseInt(event.target.height) + 30).toString();
+      }
+    });
+
     videoFrameList.appendChild(frameEl);
   }
 };

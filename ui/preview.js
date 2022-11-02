@@ -706,32 +706,62 @@
   }
   var a2 = Object.freeze({ __proto__: null, listen: e, once: u2, emit: s3 });
 
-  // seq.jsx
-  var seq_curVideoIndex = 0;
-  function sequenceLinear(videoSources2, curVideoIndex = seq_curVideoIndex) {
-    seq_curVideoIndex++;
-    if (seq_curVideoIndex >= videoSources2.length) {
-      seq_curVideoIndex = 0;
-    }
-    return videoSources2[seq_curVideoIndex];
-  }
-
   // preview.jsx
-  e("ghostidle", (event) => {
-    console.log("ghostidle", event);
-  });
+  var onMount = () => {
+    e("status-update", onStatusUpdate);
+    e("add-clip", onAddClip);
+    e("add-bridge", onAddBridge);
+  };
+  onMount();
+  var clips = {};
+  var bridges = {};
+  function onAddClip(event) {
+    const { payload } = event;
+    clips[payload.video_clip_name] = payload;
+    console.log("clips is now", clips);
+  }
+  function onAddBridge(bridge) {
+    const { payload } = bridge;
+    const originLabel = payload.origin_clip.video_clip_name;
+    if (bridges[originLabel]) {
+      bridges[originLabel].push(payload);
+    } else {
+      bridges[originLabel] = [payload];
+    }
+    console.log("add brdges is now", bridges);
+  }
+  function onStatusUpdate(status) {
+    const { payload } = status;
+    if (payload.status_of_item === "ready") {
+      const itemName = payload.label_of_item;
+      if (clips[itemName]) {
+        clips[itemName].status = "ready";
+        return;
+      }
+      console.log("playGraph is now: ", clips, bridges);
+      playIdle();
+    }
+  }
   var videoA = void 0;
   var videoB = void 0;
   var started = false;
-  var videoSources = [];
-  var nextVideo = (curVideo) => {
-    curVideo.src = sequenceLinear(videoSources);
-  };
-  m.listen("status-update", (event) => {
-    const newSource = event.payload.label_of_item;
-    if (!videoSources.includes(newSource)) {
-      videoSources.push(c(newSource));
+  var getNextNode = (curNode) => {
+    if (curNode.destination_clip) {
+      console.log("thie current node is a bridge so i am just getting the next video");
+      return clips[curNode.destination_clip.video_clip_name];
     }
+    const validBridges = bridges[curNode.video_clip_name];
+    console.log("clip ending, now playing valid bridge from ", validBridges);
+    let index = Math.floor(Math.random() * validBridges.length);
+    return validBridges[index];
+  };
+  var setSrc = (el, currentPlayingNode) => {
+    const nextNode = getNextNode(currentPlayingNode);
+    el.src = c(decodeURI(nextNode.path_to_generated_video));
+    el.node = nextNode;
+  };
+  var playIdle = () => {
+    const ControlPanelWindow = new v("control_panel");
     if (!started) {
       started = true;
       videoA = document.getElementById("videoA");
@@ -739,23 +769,31 @@
       videoB.style.display = "none";
       videoA.style.display = "block";
       videoA.onended = function(e2) {
-        console.time();
         videoB.play();
-        console.timeLog();
         videoA.style.display = "none";
         videoB.style.display = "block";
-        console.timeLog();
-        nextVideo(videoA);
+        r2("preview_video_started", {
+          labelOfItem: videoB.node.label_of_item || videoB.node.video_clip_name
+        });
+        setSrc(videoA, videoB.node);
       };
       videoB.onended = function(e2) {
         videoA.play();
         videoB.style.display = "none";
         videoA.style.display = "block";
-        nextVideo(videoB);
+        r2("preview_video_started", {
+          labelOfItem: videoA.node.label_of_item || videoA.node.video_clip_name
+        });
+        setSrc(videoB, videoA.node);
       };
-      videoA.src = videoSources[0];
-      nextVideo(videoB);
-      videoA.play();
     }
-  });
+    resetGraph();
+  };
+  var resetGraph = () => {
+    console.log("init now");
+    videoA.node = Object.values(clips)[0];
+    videoA.src = c(videoA.node.path_to_generated_video);
+    setSrc(videoB, videoA.node);
+    videoA.play();
+  };
 })();
