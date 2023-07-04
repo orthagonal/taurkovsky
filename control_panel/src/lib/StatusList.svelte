@@ -30,11 +30,11 @@
     appWindow.listen('add-bridge', onAddBridge);
     appWindow.listen('add-clip', onAddClip);
     appWindow.listen('status-update', onStatusUpdate);
-    simulate([{
-      onAddBridge,
-      onAddClip,
-      onStatusUpdate
-    }]);
+    // simulate([{
+    //   onAddBridge,
+    //   onAddClip,
+    //   onStatusUpdate
+    // }]);
   });
   
 </script>

@@ -61,10 +61,10 @@ const makeAllWorkingDirs = async (sourcePath) => {
 
 // display the frames of the source video
 const displayThumbsDir = async (sourcePath) => {
-  console.log('displayThumbsDir', sourcePath);
+  console.log('displayThumbsDir', sourcePath); // C:\Users\ortha\AppData\Roaming\taurkovsky\MVI_5830\thumbs
   let isStartFrame = true;
   const frameEntries = await readDir(sourcePath);
-  console.log('frameEntries', frameEntries);
+  console.log('frameEntries', frameEntries);  // { name: "frame_0001.png", path: "C:\\Users\\ortha\\AppData\\Roaming\\taurkovsky\\MVI_5830\\thumbs\\frame_0001.png" }
   // keep watching until something appears, good enough for now
   // the 'right' way to do this is probably use a watcher in rust then signal here when ready
   if (frameEntries.length === 0) {

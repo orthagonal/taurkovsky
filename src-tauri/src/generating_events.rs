@@ -10,15 +10,19 @@ use std::{
 use std::process::Command;
 use std::thread;
 
+use crate::tauri_events::notify_frames_ready;
+
 /* convenience functions for paths */
-/* todo: probably clean this up some */
 pub fn filename(source: &str) -> String { Path::file_stem(Path::new(&source)).unwrap().to_str().unwrap().to_string() }
 
-// selecting a new file with set_working_dir will change what this returns:
+// selecting a new file with set_working_dir will change the current workind dir
+// and generate these dirs if they don't exist
 pub fn get_cwd() -> PathBuf { env::current_dir().unwrap() }
 pub fn get_cwd_string() -> String { get_cwd().to_str().unwrap().to_string() }
 pub fn get_frames_path() -> PathBuf { get_cwd().join("frames") }
 pub fn get_frames_string() -> String { get_frames_path().to_str().unwrap().to_string() }
+pub fn get_thumbs_path() -> PathBuf { get_cwd().join("thumbs") }
+pub fn get_thumbs_string() -> String { get_thumbs_path().to_str().unwrap().to_string() }
 
 // bridge exporting will need to be revisited:
 pub fn bridge_frames_path(source_video_name: &str) -> PathBuf { get_cwd().join("bridge_frames").join(source_video_name) }
@@ -28,7 +32,7 @@ pub fn bridge_video_string(source_video_name: &str) -> String { bridge_video_pat
 
 
 // will set up a working directory for the video, and generate frames from it
-pub fn add_new_video_source(new_video_source: String) -> PathBuf {
+pub fn add_new_video_source() -> PathBuf {
   let path = get_cwd();
   match Path::new(&path).exists() {
     false => std::fs::create_dir(Path::new(&path)).unwrap(),
@@ -72,7 +76,7 @@ pub fn generate_frames_from_video(new_video_source: String, dest_dir: PathBuf) {
 }
 
 // just calls out to ffmpeg to turn the video into frames
-pub fn generate_thumbs_from_video(new_video_source: String, dest_dir: PathBuf) {
+pub fn generate_thumbs_from_video(app_handle: tauri::AppHandle, new_video_source: String, dest_dir: PathBuf) {
   // just use command to call ffmpeg executable (the time-consuming part occurs inside ffmpeg)
   let ffmpeg_cmd = match env::var("FFMPEG_CMD") {
     Ok(val) => val,
@@ -99,7 +103,27 @@ pub fn generate_thumbs_from_video(new_video_source: String, dest_dir: PathBuf) {
     .arg("-hide_banner")
     .output().unwrap();
     println!("generate_thumbs_from_video result is {}", String::from_utf8(command.stdout).unwrap());
+    // get frame file entries:
+    let frame_entries = get_frames_from_dir(dest_dir);
+    notify_frames_ready(app_handle, frame_entries);
   });
+}
+
+pub fn get_frames_from_dir(dest_dir: PathBuf) -> Vec<String> {
+    let mut frame_entries: Vec<String> = Vec::new();
+    dbg!(dest_dir.clone());
+    let dir_entries = std::fs::read_dir(dest_dir).unwrap().into_iter();
+    for entry in dir_entries {
+      match entry {
+        Ok(entry) => {
+          let path = entry.path();
+          let path_str = path.to_str().unwrap().to_string();
+          frame_entries.push(path_str);
+        },
+        Err(e) => println!("error reading dir entry: {}", e),
+      }
+    }
+    frame_entries
 }
 
 /*
@@ -187,7 +211,7 @@ pub fn create_video_clip(source_dir: PathBuf, dest_dir: PathBuf, clip_info: Clip
     .arg(format!("{}/{}", dest_dir.display(), output_name))
     .arg("-hide_banner")
     .output();
-  let result = match command {
+  match command {
     Ok(val) => val,
     Err(e) => panic!("error running ffmpeg: {}", e),
   };
@@ -239,7 +263,6 @@ pub fn create_video_from_frames(source_dir: PathBuf, dest_dir: PathBuf, output_n
 
 pub fn export_bridge(
   path_to_bridge_frames: &Path,
-  outputName: String,
   path_to_frame_1: &Path, 
   path_to_frame_2: &Path
 ) -> String {

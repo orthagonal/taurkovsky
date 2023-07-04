@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "cross-env NODE_ENV=development vite",
     "build": "vite build",
     "dev:tauri": "vite --config vite.config.tauri.js",
     "build:tauri": "vite build --config vite.config.tauri.js",
@@ -15,6 +15,7 @@
     "@tauri-apps/cli": "^1.1.1",
     "@types/d3-graphviz": "^2.6.7",
     "autoprefixer": "^9.8.8",
+    "cross-env": "^7.0.3",
     "cytoscape": "^3.23.0",
     "d3": "^7.6.1",
     "d3-graphviz": "^4.4.0",

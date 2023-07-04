@@ -4,9 +4,8 @@ this is the main place that the jsx communicates with the rust code
 */
 use std::{sync::{Arc, Mutex}, path::Path};
 use tauri::Manager;
-use crate::{generating_events::get_cwd_string, video_clip::VideoClip, video_bridge::VideoBridge};
-
-use crate::generating_events::{get_cwd, filename};
+use crate::{generating_events::{get_cwd_string, get_frames_string, get_thumbs_string}, video_clip::VideoClip, video_bridge::VideoBridge};
+use crate::generating_events::{filename};
 
 // when the user clicks a frame of video in the main screen:
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -114,6 +113,24 @@ pub fn notify_status_update_(
   }).unwrap();
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FramesReadyPayload {
+  working_dir: String, // path to the working directory
+  frames_dir: String, // path to the directory containing the frames
+  thumbs_dir: String, // path to the directory containing the thumbnails
+  frame_entries: Vec<String> // array of paths to the frames
+}
+
+pub fn notify_frames_ready(app_handle: tauri::AppHandle, frame_entries: Vec<String>) {
+  let destination_window = app_handle.get_window("control_panel").unwrap();
+  destination_window.emit("frames-ready", FramesReadyPayload {
+    working_dir: get_cwd_string(),
+    frames_dir: get_frames_string(), 
+    thumbs_dir: get_thumbs_string(), 
+    frame_entries: frame_entries
+  }).unwrap();
+}
+
 
 // for each clip:
   // export that clip as a video
@@ -178,7 +195,6 @@ pub fn export_ghostidle(
       let frame_2 = &clip_two.path_to_start_frame;
       let string_to_bridge_frames2 = format!("{}_{}", get_cwd_string(), filename(&frame_2));
       // let string_to_bridge_frames2 = format!("{}_{}", get_cwd_string(&frame_2), filename(&frame_2));
-      let path_to_bridge_frames2 = Path::new(&string_to_bridge_frames2);
       if !previous_reports.contains_key(&string_to_bridge_frames2) {
         notify_status_update_(app_handle.clone(), "control_panel".to_string(), string_to_bridge_frames2.clone(), "generating bridge frames".to_string(), 0, "".to_string(), "".to_string());
         if !Path::exists(&path_to_bridge_frames) {
@@ -213,7 +229,7 @@ and display the score
 */
 
 // first time user clicks is the start frame, second time is the end frame
-pub fn set_clip(app_handle: tauri::AppHandle, click_frame_payload: ClickFramePayload, video_clips_mutex: &Arc<Mutex<Vec<VideoClip>>>) {
+// pub fn set_clip(_app_handle: tauri::AppHandle, _click_frame_payload: ClickFramePayload, video_clips_mutex: &Arc<Mutex<Vec<VideoClip>>>) {
   // if click_frame_payload.is_start_frame {
   //   let clip = VideoClip {
   //     path_to_start_frame: click_frame_payload.path_to_frame,
@@ -233,7 +249,7 @@ pub fn set_clip(app_handle: tauri::AppHandle, click_frame_payload: ClickFramePay
   //   video_clip.path_to_final_frame = click_frame_payload.path_to_frame;
   //   notify_clip_added(app_handle.clone(), click_frame_payload.path_to_frame.clone());
   // }
-}
+// }
 
 // node_modules/node.env/api.js:128:17: ERROR: Could not resolve "asyncawait/async"
 // node_modules/node.env/api.js:129:17: ERROR: Could not resolve "asyncawait/await"

@@ -1,18 +1,12 @@
 use std::{
   collections::HashMap, 
-  rc::Rc, 
-  cell::RefCell, 
-  path::Path,
-  process::Command
 };
-use serde::{Serialize, Deserialize};
 use tauri::Manager;
 use crate::{  
   generating_events::{
-    filename, 
     get_cwd_string 
   }, 
-  tauri_events::{notify_status_update_, notify_clip_added}, video_bridge::VideoBridge, video_clip::VideoClip
+  tauri_events::{notify_clip_added}, video_bridge::VideoBridge, video_clip::VideoClip
 };
 use graphlib::{Graph, VertexId};
 // used for spawning ffmpeg.exe calls in the background:
@@ -82,10 +76,6 @@ impl GhostIdle {
           println!("adding edge from {:?} to {:?}", v1, v2);
           dbg!(origin_clip);
           dbg!(dest_clip);
-          let start_name = format!("{}{}", origin_clip.video_clip_name, origin_clip.index_of_final_frame);
-          let final_name = format!("{}{}", dest_clip.video_clip_name, dest_clip.index_of_start_frame);
-          let bridge_video_name = format!("{}-{}", start_name, final_name);
-          let start_frame = filename(&origin_clip.path_to_start_frame);
           // start exporting the bridge right away so it will be ready sooner:
           let bridge = VideoBridge::new(origin_clip.clone(), dest_clip.clone());
           // notify the frontend that we're starting to export the bridge:
@@ -115,8 +105,8 @@ impl GhostIdle {
     for &v in self.graph.clone().vertices() {
       payload.clips.push(self.graph.fetch(&v).unwrap().clone());
     }
-    for (v1, bridge_map) in self.bridges.clone() {
-      for (v2, bridge) in bridge_map {
+    for (_v1, bridge_map) in self.bridges.clone() {
+      for (_v2, bridge) in bridge_map {
         payload.bridges.push(bridge.clone());
       }
     }
@@ -124,18 +114,18 @@ impl GhostIdle {
     destination_window.emit("ghostidle", serde_json::to_string(&payload).unwrap());
   }
 
-  pub fn export_clips(&mut self, app_handle: tauri::AppHandle) {
-    for x in self.graph.vertices() {
-      let clip = self.graph.fetch(x).unwrap();
+  // pub fn export_clips(&mut self, app_handle: tauri::AppHandle) {
+  //   for x in self.graph.vertices() {
+  //     let clip = self.graph.fetch(x).unwrap();
 
-    }
-  }
+  //   }
+  // }
 
-  pub fn export_bridges(&mut self, app_handle: tauri::AppHandle) {
-  }
+  // pub fn export_bridges(&mut self, app_handle: tauri::AppHandle) {
+  // }
 
-  pub fn export_videos(&mut self, app_handle: tauri::AppHandle) {
-    self.export_clips(app_handle);
-  }
+  // pub fn export_videos(&mut self, app_handle: tauri::AppHandle) {
+  //   self.export_clips(app_handle);
+  // }
 
 }

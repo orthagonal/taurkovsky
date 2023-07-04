@@ -1,5 +1,28 @@
+// vite assets must be imported specifically in order to be included in the dev server
+import thumb1 from 'C:/Users/ortha/AppData/Roaming/taurkovsky/MVI_5830/thumbs/frame_0001.png';
+import thumb2 from 'C:/Users/ortha/AppData/Roaming/taurkovsky/MVI_5830/thumbs/frame_0002.png';
+import thumb3 from 'C:/Users/ortha/AppData/Roaming/taurkovsky/MVI_5830/thumbs/frame_0003.png';
+import thumb4 from 'C:/Users/ortha/AppData/Roaming/taurkovsky/MVI_5830/thumbs/frame_0004.png';
+import thumb5 from 'C:/Users/ortha/AppData/Roaming/taurkovsky/MVI_5830/thumbs/frame_0005.png';
+import thumb6 from 'C:/Users/ortha/AppData/Roaming/taurkovsky/MVI_5830/thumbs/frame_0006.png';
+import thumb7 from 'C:/Users/ortha/AppData/Roaming/taurkovsky/MVI_5830/thumbs/frame_0007.png';
+import thumb8 from 'C:/Users/ortha/AppData/Roaming/taurkovsky/MVI_5830/thumbs/frame_0008.png';
+import thumb9 from 'C:/Users/ortha/AppData/Roaming/taurkovsky/MVI_5830/thumbs/frame_0009.png';
+import thumb10 from 'C:/Users/ortha/AppData/Roaming/taurkovsky/MVI_5830/thumbs/frame_0010.png';
+import thumb11 from 'C:/Users/ortha/AppData/Roaming/taurkovsky/MVI_5830/thumbs/frame_0011.png';
+import thumb12 from 'C:/Users/ortha/AppData/Roaming/taurkovsky/MVI_5830/thumbs/frame_0012.png';
 
 // sample event payloads and other things to build tests from:
+// FramePicker uses this to simulate getting a list of thumbs from readDir
+
+const thumbList = [
+  thumb1, thumb2, thumb3, thumb4, thumb5, thumb6, thumb7, thumb8, thumb9, thumb10, thumb11, thumb12
+]
+export const readDirThumbs = thumbList.map(t => ({
+  name: t.split('/').pop(),
+  path: t.split('/').slice(0, -1).join('/'),
+  realPath: t.replace('thumbs', 'frames'),
+}));
 
 export const sampleClips = {
     43_102: {

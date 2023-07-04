@@ -2,7 +2,7 @@ use std::{path::Path, process::Command};
 
 use serde::{Serialize, Deserialize};
 
-use crate::{generating_events::{bridge_frames_path, get_cwd}, video_clip::VideoClip, tauri_events::notify_status_update_};
+use crate::{ video_clip::VideoClip, tauri_events::notify_status_update_};
 
 // automatically generated bridges that connect up all of the 
 // videoclips the user selected
@@ -43,8 +43,6 @@ impl VideoBridge {
     let path_to_start_frame = self.origin_clip.path_to_start_frame.clone();
     let path_to_final_frame = self.destination_clip.path_to_start_frame.clone();
     let path_to_generated_frames = self.path_to_generated_frames.clone();
-    let index_of_start_frame = self.origin_clip.index_of_final_frame;
-    let index_of_final_frame = self.destination_clip.index_of_start_frame;
     let command = Command::new(cmd_string)
       .current_dir("c:\\GitHub\\rife\\rife")
       .arg("-c")
@@ -180,7 +178,7 @@ impl VideoBridge {
       self.generate_frames(app_handle_option.clone());
     }
     {
-      let child_thread = tauri::async_runtime::spawn(async move {
+      tauri::async_runtime::spawn(async move {
         // ffmpeg  -start_number 1 -i frame_0004/frames/frame_%04d.png -c:v vp8 -format rgba -vframes 150 frame_0004/4thru99.webm -hide_banner
         let command = Command::new("cmd")
           .current_dir(std::path::PathBuf::from("C:/ffmpeg"))

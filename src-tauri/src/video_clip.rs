@@ -1,4 +1,4 @@
-use std::{process::Command, path::Path};
+use std::{process::Command};
 
 use serde::{Serialize, Deserialize};
 
@@ -165,9 +165,6 @@ impl VideoClip {
   }
 
 }
-
-
-
 
 // is to be emitted to the frontend
 // current status of each video clip

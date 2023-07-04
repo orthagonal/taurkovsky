@@ -177,11 +177,11 @@
     appWindow.listen('add-clip', onAddClip);
     appWindow.listen('add-bridge', onAddBridge);
     const container =  document.getElementById("sigma-container");
-    simulate([{
-			onStatusUpdate,
-			onAddClip,
-			onAddBridge,
-		}]);
+    // simulate([{
+		// 	onStatusUpdate,
+		// 	onAddClip,
+		// 	onAddBridge,
+		// }]);
   });
 
 </script>

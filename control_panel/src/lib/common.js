@@ -19,3 +19,27 @@ export const TailwindColors = {
 export const mapStatusToColor = (status) => StatusColorMap[status] || "gray";
 export const mapStatusToTailwindColor = (status) => TailwindColors[status] || "bg-gray-500";
   
+
+
+
+// tauri imports
+import { appWindow } from '@tauri-apps/api/window'
+import { open } from '@tauri-apps/api/dialog';
+import { convertFileSrc, invoke } from '@tauri-apps/api/tauri';
+import { copyFile, createDir, readDir } from '@tauri-apps/api/fs';
+import { appDir, basename, join, extname } from '@tauri-apps/api/path';
+
+// all this provided by Interop.js which mocks all these funcs in dev mode
+export const prodTauri = {
+  open,
+  join,
+  readDir,
+  createDir,
+  basename,
+  extname,
+  appWindow,
+  invoke,
+  copyFile,
+  convertFileSrc,
+  appDir
+};
