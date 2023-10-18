@@ -1092,7 +1092,7 @@ function defaultNextVideoStrategy(currentVideo) {
 const stateTransitions = {
     'blank': {
         'o': '/main/o_fast.webm',
-        'l': '/main/l_eye.webm',
+        'l': '/main/l5.webm',
     },
     'o': {
         'op': '/main/op_3.webm',
@@ -1107,13 +1107,13 @@ const stateTransitions = {
         'open_hover': '/main/open_new_hover.webm',
     },
     'l': {
-        'lo': '/main/lo_eye.webm',
+        'lo': '/main/lo2.webm',
     },
     'lo': {
-        'loo': '/main/loo_fast.webm',
+        'loo': '/main/loo2.webm',
     },
     'loo': {
-        'look': '/main/look.webm',
+        'look': '/main/look2.webm',
     },
     'look': {
         'look_at_handle_enter': '/main/look_at_handle_enter.webm',
@@ -1165,14 +1165,14 @@ function getDefaultVideoForState(state) {
         'ope_idle': 'main/ope_idle.webm',
         'open': 'main/open_idle.webm',
         // 'look' sequence
-        'l': 'main/l_eye_idle.webm',
-        'l_idle': 'main/l_eye_idle.webm',
-        'lo': 'main/lo_eye_idle.webm',
-        'lo_idle': 'main/lo_eye_idle.webm',
-        'loo': 'main/loo_idle.webm',
-        'loo_idle': 'main/loo_idle.webm',
-        'look': 'main/look_idle.webm',
-        'look_idle': 'main/look_idle.webm',
+        'l': 'main/l23_idle.webm',
+        'l_idle': 'main/l23_idle.webm',
+        'lo': 'main/lo3_idle.webm',
+        'lo_idle': 'main/lo3_idle.webm',
+        'loo': 'main/loo3_idle.webm',
+        'loo_idle': 'main/loo3_idle.webm',
+        'look': 'main/look3_idle.webm',
+        'look_idle': 'main/look3_idle.webm',
         // 'look_at_handle' sequence
         'look_at_handle_enter': 'main/look_at_handle_idle.webm',
         'look_at_handle_idle': 'main/look_at_handle_idle.webm',
@@ -1184,172 +1184,6 @@ function getDefaultVideoForState(state) {
         'open_hover_exit': 'main/open_hover_exit.webm',
     };
     return defaults[state];
-}
-
-function old_gNextCursorVideo(currentVideo, playgraph, userInput) {
-    // get the next user input in the queue and the current cursor state
-    const nextUserInput = userInputQueue.shift() || '';
-    // just need a closed_idle, open_idle
-    // if user hasn't typed anything automatically go to idle state
-    if (nextUserInput === '') {
-        if (window.cursorState === 'blank') {
-            return `/main/blank.webm`;
-        }
-        // if (window.cursorState === 'open_hover') {
-        //     window.cursorState = 'open_hover_idle';
-        //     return `/main/open_new_hover.webm`;
-        // }
-        if (window.cursorState === 'open_hover_idle') {
-            return `/main/open_hover_idle.webm`;
-        }
-        if (window.cursorState === 'open_hover_exit') {
-            window.cursorState = 'open_idle';
-            return `/main/open_hover_exit.webm`;
-        }
-        // look sequence
-        if (window.cursorState === 'l') {
-            window.cursorState = 'l_idle';
-            return `/main/l_eye_idle.webm`;
-        }
-        if (window.cursorState === 'lo') {
-            window.cursorState = 'lo_idle';
-            return `/main/lo_eye_idle.webm`;
-        }
-        if (window.cursorState === 'loo') {
-            window.cursorState = 'loo_idle';
-            return `/main/loo_idle.webm`;
-        }
-        if (window.cursorState === 'look') {
-            window.cursorState = 'look_idle';
-            return `/main/look_idle.webm`;
-        }
-        if (window.cursorState === 'look_at_handle_enter') {
-            window.cursorState = 'look_at_handle_idle';
-            return `/main/look_at_handle_idle.webm`;
-        }
-        // open sequence
-        if (window.cursorState === 'o') {
-            window.cursorState = 'o_idle';
-            return `/main/o_idle.webm`;
-        }
-        if (window.cursorState ==='op') {
-            window.cursorState = 'op_idle';
-            return `/main/op_idle_5.webm`;
-        }
-        if (window.cursorState === 'ope') {
-            window.cursorState = 'ope_idle';
-            return `/main/ope_idle.webm`;
-        }
-        if (window.cursorState === 'open') {
-            wordCompleted = true;
-            window.cursorState = 'open_idle';
-            return `/main/open_idle.webm`;
-        }
-        if (window.cursorState === 'open_idle') {
-            return `/main/open_idle.webm`;
-        }
-    }
-    wordCompleted = true;
-}
-
-// Example usage
-// Assuming currentVideo, playgraph, and userInput are defined in your context.
-// const nextVideoPath = getNextVideo(currentVideo, playgraph, userInput);
-
-// refactor to use playgraphs and tags system
-// refactor to use playgraphs and tags system
-// refactor to use playgraphs and tags system
-// refactor to use playgraphs and tags system
-// EDITOR: be able to load a folder of different clips and connect them together in a playgraph
-function keyboardMatchingCursorNextVideoStrategy(currentVideo) {
-   // If current video is not an _idle video and cursorState matches the current video's state, transition to _idle state
-   const currentVideoState = currentVideo.src.split("/").pop().replace(".webm", "");
-   if (!currentVideoState.includes("_idle") && window.cursorState.startsWith(currentVideoState)) {
-       const idleNode = this.playgraph.nodes.find(node => node.id === `${currentVideoState}_idle`);
-       if (idleNode) {
-           this.currentNodeIndex = this.playgraph.nodes.indexOf(idleNode);
-           return `/main/${idleNode.name}`;
-       }
-   }
-    // Handle transition from 'look' to 'look_idle'
-    if ((currentVideo.src.includes("look.webm") || currentVideo.src.includes("look_idle.webm")) && window.cursorState === 'look') {
-        const idleNode = this.playgraph.nodes.find(node => node.id === "look_idle");
-        if (idleNode) {
-            this.currentNodeIndex = this.playgraph.nodes.indexOf(idleNode);
-            window.cursorState = 'look_idle';
-            return `/main/${idleNode.name}`;
-        }
-    }
-
-    // Keep playing 'look_idle' until some other interaction changes the cursorState
-    if (currentVideo.src.includes("look_idle.webm") && window.cursorState === 'look_idle') {
-        const idleNode = this.playgraph.nodes.find(node => node.id === "look_idle");
-        if (idleNode) {
-            this.currentNodeIndex = this.playgraph.nodes.indexOf(idleNode);
-            return `/main/${idleNode.name}`;
-        }
-    }
-   if (window.cursorState === 'look_at_handle_enter') {
-        const enterNode = this.playgraph.nodes.find(node => node.id === "look_at_handle_enter");
-        if (enterNode) {
-            this.currentNodeIndex = this.playgraph.nodes.indexOf(enterNode);
-            window.cursorState = 'look_at_handle_idle';  // Set the next state to transition to idle after enter
-            return `/main/${enterNode.name}`;
-        }
-    }
-
-    // Loop the idle video for 'look_at_handle' as long as cursorState remains 'look_at_handle_idle'
-    if (currentVideo.src.includes("look_at_handle_idle.webm") && window.cursorState === 'look_at_handle_idle') {
-        const idleNode = this.playgraph.nodes.find(node => node.id === "look_at_handle_idle");
-        if (idleNode) {
-            this.currentNodeIndex = this.playgraph.nodes.indexOf(idleNode);
-            return `/main/${idleNode.name}`;
-        }
-    }
-
-    // Handle the 'look_at_handle_exit' state and transition back to 'look' state
-    if (window.cursorState === 'look_at_handle_exit') {
-        if (currentVideo.src.includes("look_at_handle_idle.webm")) {
-            const exitNode = this.playgraph.nodes.find(node => node.id === "look_at_handle_exit");
-            if (exitNode) {
-                this.currentNodeIndex = this.playgraph.nodes.indexOf(exitNode);
-                window.cursorState = 'look_idle';  // Resetting the cursor state back to 'look' after the exit
-                return `/main/${exitNode.name}`;
-            }
-        }
-        // If the above condition doesn't trigger (i.e., we are not in the 'idle' video when cursorState becomes 'exit'), 
-        // you can include logic here to handle the transition directly to 'look_at_handle_exit' from any other video.
-    }
-
-    // Get the node directly corresponding to the current window.cursorState
-    const targetNode = this.playgraph.nodes.find(node => node.id === window.cursorState);
-
-    // If a matching node is found, return its video path
-    if (targetNode) {
-        const nextVideoPath = `/main/${targetNode.name}`;
-
-        // Update the currentNodeIndex for further operations
-        this.currentNodeIndex = this.playgraph.nodes.indexOf(targetNode);
-        return nextVideoPath;
-    }
-
-    // If the cursorState doesn't match any node, fallback to 'blank.webm'
-    const fallbackNode = this.playgraph.nodes.find(node => node.id === "blank");
-    if (fallbackNode) {
-        this.currentNodeIndex = this.playgraph.nodes.indexOf(fallbackNode);
-        return `/main/${fallbackNode.name}`;
-    }
-
-    // Default behavior continues as before
-    const nextVideoPath = `/main/${currentNode.edges[nextEdgeIndex].id}`;
-
-    const nextNodeId = currentNode.edges[nextEdgeIndex].to;
-    const nextNodeIndex = this.playgraph.nodes.findIndex(node => node.id === nextNodeId);
-    if (nextNodeIndex !== -1) {
-        this.currentNodeIndex = nextNodeIndex;
-    }
-
-    return nextVideoPath;
 }
 
 class VideoPlayer {
