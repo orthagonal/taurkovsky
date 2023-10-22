@@ -248,6 +248,7 @@ fn main(
 }
 `;
 
+import VideoPlayer from './VideoPlayer.js';
 
 // global variables
 const screenWidth = 1920.0;
@@ -434,8 +435,9 @@ const defaultCursorEventHandlers = {
                 return;
             }
         }
-        if (window.cursorState === 'look_at_handle') {
-            userInputQueue = ['look_at_handle_exit'];
+        if (window.cursorState === 'look_at_handle_idle') {
+            window.cursorState = 'look_at_handle_exit';
+            userInputQueue = ['look'];
             return;
         }
     },
@@ -854,8 +856,8 @@ async function renderFrame() {
     // currentHitboxList will have entries like:
     //      matchPixel(pixel) { return pixel[1] > 0; },
     //      name: 'handle'
-      if (currentHitboxList) {
-        currentHighlightedHitbox = currentHitboxList.find(hitbox => { if (hitbox.matchPixel(pixelData)) { return hitbox.name; } });
+      if (window.mainVideoPlayer.currentHitboxList) {
+        currentHighlightedHitbox = window.mainVideoPlayer.currentHitboxList.find(hitbox => { if (hitbox.matchPixel(pixelData)) { return hitbox.name; } });
       }
 }
 
@@ -966,7 +968,11 @@ window.onload = async function () {
     
     window.addEventListener("keyup", (event) => {
         if (isLetterAnimating) return;  // If a letter is animating, ignore other keypresses
-    
+        // any key to exit a text state
+        if (window.cursorState === 'look_at_handle_idle') {
+            userInputQueue = ['look_at_handle_exit'];
+            return;
+        }
         if (event.key === "ArrowRight") {
             window.userInput = "next";
         } else if (event.key === "Backspace" || event.key === "Escape") {
@@ -1091,40 +1097,47 @@ function defaultNextVideoStrategy(currentVideo) {
 
 const stateTransitions = {
     'blank': {
-        'o': '/main/o_fast.webm',
-        'l': '/main/l5.webm',
+        'o': '/main/o2.webm',
+        'l': '/main/3l.webm',
     },
     'o': {
-        'op': '/main/op_3.webm',
+        'op': '/main/op4.webm',
     },
     'op': {
-        'ope': '/main/ope_2.webm',
+        'ope': '/main/ope4.webm',
     },
     'ope': {
-        'open': '/main/open_adj.webm',
+        'open': '/main/open_7.webm',
     },
     'open': {
         'open_hover': '/main/open_new_hover.webm',
     },
+    'open_hover_exit': {
+        'open_hover': '/main/open_new_hover.webm',
+    },
+
     'l': {
-        'lo': '/main/lo2.webm',
+        'lo': '/main/3lo.webm',
     },
     'lo': {
-        'loo': '/main/loo2.webm',
+        'loo': '/main/3loo.webm',
     },
     'loo': {
-        'look': '/main/look2.webm',
+        'look': '/main/3look.webm',
     },
     'look': {
         'look_at_handle_enter': '/main/look_at_handle_enter.webm',
     },
-    'open_hover_exit': {
-        'open_hover': '/main/open_hover.webm',
+    'look_at_handle_exit': {
+        'look': '/main/look_at_handle_exit.webm'
     }
 };
 
 const autoTransitions = {
+    'open_hover': 'open_hover_idle', 
     'open_hover_exit': 'open',
+    'look_at_handle_enter': 'look_at_handle_idle',
+    // 'look_at_handle_exit': 'look'
 };
 
 function getNextCursorVideo(currentVideo, playgraph, userInput) {
@@ -1157,126 +1170,31 @@ function getDefaultVideoForState(state) {
     const defaults = {
         'blank': 'main/blank.webm',
         // 'open' sequence
-        'o': 'main/o_idle.webm',
-        'o_idle': 'main/o_idle.webm',
+        'o': 'main/o2_idle.webm',
+        'o_idle': 'main/o2_idle.webm',
         'op': 'main/op_idle_5.webm',
         'op_idle': 'main/op_idle_5.webm',
-        'ope': 'main/ope_idle.webm',
-        'ope_idle': 'main/ope_idle.webm',
-        'open': 'main/open_idle.webm',
+        'ope': 'main/ope5_idle.webm',
+        'ope_idle': 'main/ope5_idle.webm',
+        'open': 'main/open2_idle.webm',
+        'open_idle': 'main/open2_idle.webm',
         // 'look' sequence
-        'l': 'main/l23_idle.webm',
-        'l_idle': 'main/l23_idle.webm',
-        'lo': 'main/lo3_idle.webm',
-        'lo_idle': 'main/lo3_idle.webm',
-        'loo': 'main/loo3_idle.webm',
-        'loo_idle': 'main/loo3_idle.webm',
-        'look': 'main/look3_idle.webm',
-        'look_idle': 'main/look3_idle.webm',
+        'l': 'main/stretch2_3l_idle.webm',
+        'l_idle': 'main/stretch2_3l_idle.webm',
+        'lo': 'main/stretch_3lo_idle.webm',
+        'lo_idle': 'main/stretch_3lo_idle.webm',
+        'loo': 'main/3loo_idle.webm',
+        'loo_idle': 'main/3loo_idle.webm',
+        'look': 'main/stretch1_3look_idle.webm',
+        'look_idle': 'main/stretch1_3look_idle.webm',
         // 'look_at_handle' sequence
         'look_at_handle_enter': 'main/look_at_handle_idle.webm',
         'look_at_handle_idle': 'main/look_at_handle_idle.webm',
-        'look_at_handle_hover': 'main/look_at_handle_hover.webm',
-        'look_at_handle_leave': 'main/look_at_handle_leave.webm',
         // open hover sequence
-        'open_hover': 'main/open_hover_idle.webm',
+        'open_hover': 'main/open_new_hover.webm',
         'open_hover_idle': 'main/open_hover_idle.webm',
         'open_hover_exit': 'main/open_hover_exit.webm',
     };
     return defaults[state];
-}
-
-class VideoPlayer {
-    constructor(playgraph, getNextVideoStrategy, initialNode=false, autoStart=true) {
-        this.playgraph = playgraph;
-        this.getNextVideoStrategy = getNextVideoStrategy.bind(this);
-        this.blocked = false; // Initially, the player is not blocked
-        this.videoA = this.createVideoElement();
-        this.videoB = this.createVideoElement();
-        this.maskVideoA = this.createVideoElement(); // for mask video
-        this.maskVideoB = this.createVideoElement(); // for mask video
-        this.videoA.onended = () => this.switchVideos(this.videoA, this.videoB, this.maskVideoA, this.maskVideoB);
-        this.videoB.onended = () => this.switchVideos(this.videoB, this.videoA, this.maskVideoB, this.maskVideoA);
-        this.videoQueue = []; // Initializing the video queue
-
-        const startNode = initialNode ? initialNode : playgraph.nodes[playgraph.nodes.length - 1];
-        // i use this for the cursor since it doesn't start immediately anyway:
-        if (autoStart) {
-            this.currentNodeIndex = playgraph.nodes.indexOf(startNode);
-            this.videoA.src = `/main/${startNode.edges[0].id}`; // Assuming the main sub-folder contains the video files
-        } else {
-            this.currentNodeIndex = playgraph.nodes.indexOf(startNode);
-            this.videoA.src = `/main/${startNode.name}`;
-        }
-    }
-
-    enqueueVideo(videoPath) {
-        this.videoQueue.push(videoPath);
-    }
-
-    dequeueAndPlayNextVideo() {
-        // If the queue is empty, determine the next video using the strategy and enqueue it
-        if (this.videoQueue.length === 0) {
-            const currentVideo = this.videoA.paused ? this.videoB : this.videoA;
-            this.enqueueVideo(this.getNextVideoStrategy(currentVideo));
-        }
-        return this.videoQueue.shift();
-    }
-    
-    createVideoElement() {
-        const videoElem = document.createElement('video');
-        videoElem.style.pointerEvents = "none";
-        videoElem.preload = 'auto';
-        return videoElem;
-    }
-
-    isPlaying() {
-        return !this.videoA.paused || !this.videoB.paused;
-    }
-    
-    switchVideos(currentVideo, nextVideo, currentMaskVideo, nextMaskVideo) {
-        if (this.blocked) return;
-    
-        this.enqueueVideo(this.getNextVideoStrategy(currentVideo, this.playgraph, window.userString));
-        let nextVideoPath = this.dequeueAndPlayNextVideo();
-
-        // Determine if a mask is needed
-        const currentNode = this.playgraph.nodes[this.currentNodeIndex];
-        const hasMask = currentNode && currentNode.mask;
-        if (hasMask) {
-            currentHitboxList = currentNode.mask;
-            let maskVideoPath = nextVideoPath.replace('.webm', '_mask.webm');
-            nextMaskVideo.src = maskVideoPath;
-            nextMaskVideo.loop = true;
-            nextMaskVideo.oncanplay = () => {
-                nextMaskVideo.play();
-                const subsequentVideo = (nextVideo === this.videoA) ? this.videoB : this.videoA;
-                subsequentVideo.src = currentVideo.src.includes("_mask") ? currentVideo.src : currentVideo.src.replace(".webm", "_mask.webm");
-                nextMaskVideo.oncanplay = null;  
-            };
-        } else {
-            currentHitboxList = null;
-        }
-    
-        nextVideo.src = nextVideoPath;  // Add random query string
-        nextMaskVideo.preload = 'auto'; 
-        nextVideo.oncanplay = () => {
-            nextVideo.play();
-            if (hasMask) {
-                currentMaskVideo.currentTime = 0; // Reset mask video to the start
-                currentMaskVideo.play(); // Play mask video explicitly when main video starts playing
-            }
-            // Determine the subsequent video and preload it
-            const subsequentVideo = (nextVideo === this.videoA) ? this.videoB : this.videoA;
-            subsequentVideo.src = currentVideo.src;  // Add random query string
-            // Remove the oncanplaythrough event handler
-            nextVideo.oncanplay = null;
-        };
-    
-        // Reset userInput to 'idle' after selecting an edge
-        // TODO THIS NEEDS TO BE made abstract
-        window.userInput = 'idle';
-        // window.cursorState = 'idle';
-    }
 }
 
