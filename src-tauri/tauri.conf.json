@@ -41,8 +41,8 @@
       ]
     },
     "security": {
-      "csp": null
-    },
+      "csp": "default-src 'self'; media-src stream.localhost; style-src 'self' 'unsafe-inline'; connect-src ws: wss.tauri.localhost stream: https:;"
+    },   
     "windows": [
       {
         "additionalBrowserArgs":  "enable-unsafe-webgpu",

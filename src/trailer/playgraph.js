@@ -381,6 +381,70 @@ window.Playgraph = {
       {
         edges: [
           {
+            tags: ["intro"],
+            destination: "intro",
+            from: "intro",
+            fromPath: "none",
+            id: "full2_intro.webm",
+            path: "full2_intro.webm",
+            to: "intro",
+            toPath: "/file/candidate_good/frames/img_2209.png",
+          },
+          {
+            id: "turn_and_look.webm",
+            tags: ["turn_and_look"],
+            to: "turn_and_look",
+            autoTransition: true
+          }
+        ],
+        id: "intro",
+        label: "intro",
+        name: "e:/emulsion_workspace/candidate_good/frames/img_2211.png",
+      },
+      {
+        edges: [
+          {
+              id: "turn_and_look",
+              tags: ["turn_and_look_idle"],
+              from: "intro",
+              fromPath: "none",
+              to: "turn_and_look_idle", // After playing turn_and_look.webm, it transitions to the turn_and_look_idle state
+              toPath: "/file/candidate_good/frames/img_2209.png",
+              path: "turn_and_look_idle.webm",
+              autoTransition: true
+          }
+        ],
+        id: "turn_and_look",
+        label: "turn_and_look",
+        name: "e:/emulsion_workspace/candidate_good/frames/turn_and_look",
+      },
+      {
+        id: "turn_and_look_idle",
+        label: "turn_and_look_idle",
+        name: "path_to_turn_and_look_idle_video_or_image",
+        mask: [{
+          matchPixel(pixel) { return pixel[1] > 0; },
+          name: 'handle'
+        }],
+        edges: [
+          {
+            id: "turn_and_look_idle.webm",
+            tags: ["turn_and_look", "turn_and_look_idle"],
+            from: "intro",
+            fromPath: "none",
+            to: "turn_and_look_idle", // After playing turn_and_look.webm, it transitions to the turn_and_look_idle state
+            toPath: "/file/candidate_good/frames/img_2209.png",
+            path: "turn_and_look_idle.webm",
+            mask: [{
+              matchPixel(pixel) { return pixel[1] > 0; },
+              name: 'handle'
+            }],    
+        }
+        ]
+      },
+      {
+        edges: [
+          {
             destination:
               "e:/emulsion_workspace/candidate_good/frames/img_2209.png",
             from: "e:/emulsion_workspace/candidate_good/frames/img_2211.png",

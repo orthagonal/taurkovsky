@@ -1,10 +1,25 @@
 [build]
-target = "./index.html"
+target = "./public/player.html"
 
 [watch]
-ignore = ["./src-tauri"]
+watch = [
+  "./src/trailer/src.js",
+  "./src/trailer/VideoPlayer.js",
+  "./src/trailer/playgraph.js",
+  "./src/trailer/player.html",
+  "./src/trailer/main"
+]
+ignore = [
+  "./src-tauri",
+  "./public"
+]
 
 [serve]
 address = "127.0.0.1"
 port = 1420
-open = false
+open = true
+
+[[hooks]]
+stage = "pre_build"
+command = "sh"
+command_arguments = ["-c", "./build.sh"]
