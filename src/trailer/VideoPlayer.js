@@ -38,7 +38,7 @@ class VideoPlayer {
         if (window.__TAURI__) {
             // Running in Tauri (production), use a custom protocol or Tauri API
             // return `stream:/${videoPath}`;
-            return `https://stream.localhost${videoPath}`;
+            return videoPath[0] === '/' ? `https://stream.localhost${videoPath}` : `https://stream.localhost/${videoPath}`; 
         } else {
             // Running in development, use local server URL
             return videoPath;
@@ -63,6 +63,7 @@ class VideoPlayer {
         const videoElem = document.createElement('video');
         videoElem.style.pointerEvents = "none";
         videoElem.preload = 'auto';
+        videoElem.crossOrigin = 'anonymous';
         return videoElem;
     }
 

@@ -163,11 +163,10 @@ fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
             var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
             // Threshold distance from the cursor center to display colorFromHitboxTexture
             // var thresholdDistance = min(halfCursorWidth * .23, constants.cursorHeight); // Adjust as needed
-            var thresholdDistance = 0.15;
+            var thresholdDistance = 0.55;
             if (distanceFromCenter <= thresholdDistance) {
-                var bias = 0.4; // Adjust as needed to bias more or less in favor of smallTexture
+                var bias = 0.0; // Adjust as needed to bias more or less in favor of smallTexture
                 var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
-                // var alpha = colorFromSmallTexture.a;
                 var beta = 1.0 - alpha; // Inverse alpha value for blending
                 
                 // if alpha is 1, it will show only colorFromSmallTexture.
@@ -177,10 +176,6 @@ fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
                 
                 return blendedColor;
             }
-            
-            // if (distanceFromCenter <= thresholdDistance) {
-            //     return colorFromHitboxTexture;
-            // }
         }
         return colorFromSmallTexture;
     }
@@ -293,7 +288,8 @@ let currentHighlightedHitbox = null;
 // the string that we show to the user on screen
 // not sure why these are on window object
 window.userString = "";
-window.userInput = 'idle';
+window.userInput = 'intro';
+window.mainState = 'intro';
 window.cursorState = 'blank';
 
 let userKeyboardElement;
@@ -315,6 +311,12 @@ let mainBGL, cursorBGL, hitboxBGL, vertexUniformBGL;
 
 let currentHitboxList = false;
 let cursorActive = 0.0;  // 1.0 when cursor is 'active' and can interact with things
+
+const textFlashAnimationDuration = 100;  // 500ms or 0.5 seconds
+let previousString = "";
+let wordCompleted = false;
+
+
 function setCursorActive(newValue) {
     cursorActive = newValue;
     device.queue.writeBuffer(
@@ -424,9 +426,6 @@ const defaultCursorEventHandlers = {
                 window.cursorState = 'open_hover_exit';
             }
         }
-    },
-    click: async event => {
-        // if (window.cursorState  !== 'look_end') return;
         if (window.cursorState === 'look') {
             // check if it's the green hitbox
             // todo: make this labelled hitboxes so playgraph has list of hitbox colors -> hitbox name
@@ -439,6 +438,12 @@ const defaultCursorEventHandlers = {
             window.cursorState = 'look_at_handle_exit';
             userInputQueue = ['look'];
             return;
+        }
+    },
+    click: async event => {
+        if (window.mainState === 'intro' && window.cursorState === 'look') {
+            window.userInput = 'turn_and_look';
+            return; 
         }
     },
     keydown: event => {
@@ -482,7 +487,7 @@ async function getPixelColorFromTexture(texture, x, y) {
 }
 
 let shudderAmount = 0.000002;
-let rippleStrength = 0.02;
+let rippleStrength = 0.002;
 let rippleFrequency = 5.0;
 
 async function initWebGPU() {
@@ -861,8 +866,6 @@ async function renderFrame() {
       }
 }
 
-let previousString = "";
-let wordCompleted = false;
 async function renderLoop() {
     const textContainer = document.getElementById('textContainer');
     const latestLetterContainer = document.getElementById('latestLetterContainer');
@@ -951,8 +954,6 @@ async function renderLoop() {
     requestAnimationFrame(renderLoop);
 }
 
-const textFlashAnimationDuration = 100;  // 500ms or 0.5 seconds
-
 window.onload = async function () {   
     overlayCanvas = document.getElementById("overlayCanvas");
     window.addEventListener('resize', function() {
@@ -974,7 +975,7 @@ window.onload = async function () {
             return;
         }
         if (event.key === "ArrowRight") {
-            window.userInput = "next";
+            window.mainState = "turn_and_look";
         } else if (event.key === "Backspace" || event.key === "Escape") {
             window.cursorState = "blank";
             window.userString = "";
@@ -1011,8 +1012,9 @@ window.onload = async function () {
     window.cursorVideoPlayer = new VideoPlayer(cursorPlaygraph, getNextCursorVideo, blank, false);
 
     const playgraph = window.Playgraph.getPlaygraph('one').main;
-    const second = window.Playgraph.getPlaygraph('one').main.nodes.find(node => node.id === "e:/emulsion_workspace/candidate_good/frames/img_0281.png");
-    window.mainVideoPlayer = new VideoPlayer(playgraph, defaultNextVideoStrategy, second, true);
+    const second = window.Playgraph.getPlaygraph('one').main.nodes.find(node => node.id === "intro");
+    // window.mainVideoPlayer = new VideoPlayer(playgraph, defaultNextVideoStrategy, second, true);
+    window.mainVideoPlayer = new VideoPlayer(playgraph, mainNextVideoStrategy, second, true);
     // window.mainVideoPlayer.currentNodeIndex = playgraph.nodes.length - 1;
     let bothVideosLoaded = 0;
     // Add listeners for various user interactions
@@ -1070,30 +1072,74 @@ function defaultCursorNextVideoStrategy(currentVideo) {
     return nextVideoPath;
 }
 
+function mainNextVideoStrategy(currentVideo) {
+    if (window.mainState === 'intro') {
+        if (window.userInput === "turn_and_look") {
+            window.mainState = 'turn_and_look';
+            return '/main/turn_and_look.webm';
+        }
+        return '/main/i2_idle.webm';
+    }
+    if (window.mainState === 'turn_and_look') {
+        this.currentNodeIndex = this.playgraph.nodes.findIndex(node => node.id === 'turn_and_look_idle');
+        return '/main/turn_and_look_idle.webm';
+    }
+}
+
 function defaultNextVideoStrategy(currentVideo) {
-    // console.log('getting next for ', currentVideo.src);
     const currentNode = this.playgraph.nodes[this.currentNodeIndex];
     const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
-    let nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
+    let nextEdgeIndex;
 
-    // Select the next edge based on the global userInput variable
-    const nextEdges = currentNode.edges.filter(edge => edge.tags.includes(window.userInput));
-    if (nextEdges.length > 0) {
-        nextEdgeIndex = currentNode.edges.indexOf(nextEdges[0]);
+    // If the current video has autoTransition set, then pick the next edge
+    if (currentNode.edges[currentEdgeIndex].autoTransition) {
+        nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
+    } else {
+        // If not, then follow the existing behavior
+        nextEdgeIndex = currentEdgeIndex; // Default to the current video (looping behavior)
+
+        // Select the next edge based on the global userInput variable
+        const nextEdges = currentNode.edges.filter(edge => edge.tags.includes(window.userInput));
+        if (nextEdges.length > 0) {
+            nextEdgeIndex = currentNode.edges.indexOf(nextEdges[0]);
+        }
     }
 
     const nextVideoPath = `/main/${currentNode.edges[nextEdgeIndex].id}`;
-    // console.log('so next is');
-    // console.log(nextVideoPath);
-    // Update the current node index if we transitioned to a different node
     const nextNodeId = currentNode.edges[nextEdgeIndex].to;
     const nextNodeIndex = this.playgraph.nodes.findIndex(node => node.id === nextNodeId);
+    
     if (nextNodeIndex !== -1) {
         this.currentNodeIndex = nextNodeIndex;
     }
-    console.log(nextVideoPath);
+
     return nextVideoPath;
 }
+
+// function defaultNextVideoStrategy(currentVideo) {
+//     // console.log('getting next for ', currentVideo.src);
+//     const currentNode = this.playgraph.nodes[this.currentNodeIndex];
+//     const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
+//     let nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
+
+//     // Select the next edge based on the global userInput variable
+//     const nextEdges = currentNode.edges.filter(edge => edge.tags.includes(window.userInput));
+//     if (nextEdges.length > 0) {
+//         nextEdgeIndex = currentNode.edges.indexOf(nextEdges[0]);
+//     }
+
+//     const nextVideoPath = `/main/${currentNode.edges[nextEdgeIndex].id}`;
+//     // console.log('so next is');
+//     // console.log(nextVideoPath);
+//     // Update the current node index if we transitioned to a different node
+//     const nextNodeId = currentNode.edges[nextEdgeIndex].to;
+//     const nextNodeIndex = this.playgraph.nodes.findIndex(node => node.id === nextNodeId);
+//     if (nextNodeIndex !== -1) {
+//         this.currentNodeIndex = nextNodeIndex;
+//     }
+//     console.log(nextVideoPath);
+//     return nextVideoPath;
+// }
 
 const stateTransitions = {
     'blank': {
@@ -1107,15 +1153,14 @@ const stateTransitions = {
         'ope': '/main/ope4.webm',
     },
     'ope': {
-        'open': '/main/open_7.webm',
+        'open': '/main/open_4.webm',
     },
     'open': {
-        'open_hover': '/main/open_new_hover.webm',
+        'open_hover': '/main/open_hover_3.webm',
     },
-    'open_hover_exit': {
-        'open_hover': '/main/open_new_hover.webm',
+    'open_hover_exitlo': {
+        'open_hover': '/main/open_idle4.webm',
     },
-
     'l': {
         'lo': '/main/3lo.webm',
     },
@@ -1126,10 +1171,10 @@ const stateTransitions = {
         'look': '/main/3look.webm',
     },
     'look': {
-        'look_at_handle_enter': '/main/look_at_handle_enter.webm',
+        'look_at_handle_enter': '/main/look_at_handle_open2.webm',
     },
     'look_at_handle_exit': {
-        'look': '/main/look_at_handle_exit.webm'
+        'look': '/main/look_at_handle_exit2.webm'
     }
 };
 
@@ -1176,8 +1221,8 @@ function getDefaultVideoForState(state) {
         'op_idle': 'main/op_idle_5.webm',
         'ope': 'main/ope5_idle.webm',
         'ope_idle': 'main/ope5_idle.webm',
-        'open': 'main/open2_idle.webm',
-        'open_idle': 'main/open2_idle.webm',
+        'open': 'main/open_idle4.webm',
+        'open_idle': 'main/open_idle4.webm',
         // 'look' sequence
         'l': 'main/stretch2_3l_idle.webm',
         'l_idle': 'main/stretch2_3l_idle.webm',
@@ -1191,9 +1236,9 @@ function getDefaultVideoForState(state) {
         'look_at_handle_enter': 'main/look_at_handle_idle.webm',
         'look_at_handle_idle': 'main/look_at_handle_idle.webm',
         // open hover sequence
-        'open_hover': 'main/open_new_hover.webm',
-        'open_hover_idle': 'main/open_hover_idle.webm',
-        'open_hover_exit': 'main/open_hover_exit.webm',
+        'open_hover': 'main/open_hover_3.webm',
+        'open_hover_idle': 'main/open_hover_idle3.webm',
+        'open_hover_exit': 'main/open_hover_exit3.webm',
     };
     return defaults[state];
 }

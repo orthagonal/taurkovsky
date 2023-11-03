@@ -1,0 +1,82 @@
+body {
+  cursor: none;
+  margin: 0;
+  overflow: hidden; /* This prevents any scrolling */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+#webgpuCanvas {
+  position: absolute;
+  z-index: 0;
+  border: 1px solid green;
+}
+
+#overlayCanvas {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+#textContainer {
+  position: absolute;
+  bottom: 10%;  /* Move it to 10% from the bottom */
+  left: 50%; 
+  transform: translateX(-50%);
+  color: white;
+  font-size: 30px;
+  z-index: 2; 
+}
+
+#latestLetterContainer {
+  position: absolute;
+  top: 50%;  /* Center vertically */
+  left: 50%; /* Center horizontally */
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 90px;  /* Three times the size */
+  z-index: 2; 
+}       
+
+@keyframes blurEffect {
+  0% {
+      filter: blur(8px);
+  }
+  100% {
+      filter: blur(0px);
+  }
+}
+
+@keyframes flash {
+  0% {
+      filter: blur(8px);
+  }
+  100% {
+      filter: blur(0px);
+  }
+}
+
+.flash-animation {
+  animation: blurEffect 0.5s forwards; /* Adjust the duration as needed */
+}
+
+.blur-animation {
+  animation: blurEffect 0.5s forwards; /* Adjust the duration as needed */
+}
+
+body, html {
+  height: 100%;
+  margin: 0;
+  font-family: Arial, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+} 
+
+.centered-input {
+  border: 2px solid black;
+  border-radius: 5px;
+  padding: 10px 15px;
+  font-size: 16px;
+}
