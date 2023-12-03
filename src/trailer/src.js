@@ -1,3 +1,22 @@
+let lastFrameTime = Date.now();
+let frameCount = 0;
+
+function updateFPS() {
+    const now = Date.now();
+    const deltaTime = now - lastFrameTime;
+    frameCount++;
+
+    // Update FPS every second
+    if (deltaTime >= 1000) {
+        const fps = frameCount;
+        frameCount = 0;
+        lastFrameTime = now;
+
+        // Update the FPS counter on the page
+        document.getElementById('fpsCounter').innerText = 'FPS: ' + fps;
+    }
+}
+
 const startTime = performance.now();
 
 const vertexShaderCode = /* wgsl */`
@@ -87,7 +106,6 @@ const mainFragmentShaderCode = /* wgsl */`
 fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
     return textureSampleBaseClampToEdge(myTexture, mySampler, fragUV);
 }
-
 `;
 
 const cursorFragmentShaderCode = /* wgsl */`
@@ -112,74 +130,52 @@ struct Constants {
 @group(0) @binding(1) var smallTexture: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> mousePosition: MouseUniform;
 @group(0) @binding(3) var<uniform> constants: Constants;
-@group(0) @binding(4) var hitboxTexture: texture_2d<f32>;
+@group(0) @binding(4) var maskTexture: texture_2d<f32>;
 
 @fragment
 fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
-    var halfCursorWidth = constants.cursorWidth / constants.screenWidth / 2.0;
-    var halfCursorHeight = constants.cursorHeight / constants.screenHeight / 2.0;
-    var leftBoundary = mousePosition.mousePosition.x -halfCursorWidth;
-    var rightBoundary = mousePosition.mousePosition.x + halfCursorWidth;
-    var bottomBoundary = mousePosition.mousePosition.y - halfCursorHeight;
-    var topBoundary = mousePosition.mousePosition.y + halfCursorHeight;
+    let halfCursorWidth = constants.cursorWidth / constants.screenWidth / 2.0;
+    let halfCursorHeight = constants.cursorHeight / constants.screenHeight / 2.0;
+    let leftBoundary = mousePosition.mousePosition.x -halfCursorWidth;
+    let rightBoundary = mousePosition.mousePosition.x + halfCursorWidth;
+    let bottomBoundary = mousePosition.mousePosition.y - halfCursorHeight;
+    let topBoundary = mousePosition.mousePosition.y + halfCursorHeight;
 
-    var isWithinCursor = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
+    let isWithinCursor = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
                          fragUV.y > bottomBoundary && fragUV.y < topBoundary;
 
     if (isWithinCursor) {
-        var uCoord = (fragUV.x - leftBoundary) / (2.0 * halfCursorWidth);
-        var vCoord = (fragUV.y - bottomBoundary) / (2.0 * halfCursorHeight);
-        var adjustedUV = vec2<f32>(uCoord, vCoord);
+        let uCoord = (fragUV.x - leftBoundary) / (2.0 * halfCursorWidth);
+        let vCoord = (fragUV.y - bottomBoundary) / (2.0 * halfCursorHeight);
+        let adjustedUV = vec2<f32>(uCoord, vCoord);
 
-        // in case you want rotation of some kind:
-        // // Translate so center of cursor is at (0, 0)
-        // var translatedUV = adjustedUV - vec2<f32>(0.5, 0.5);
-
-        // // Compute rotation angle based on mouse x position.
-        // var maxRotation = 0.45 * 3.14159265359; // in radians (45 degrees)
-        // var rotationAmount = (mousePosition.mousePosition.x - 0.5) * 2.0;
-        // var theta = -rotationAmount * maxRotation;
-
-        // // Apply the 2D rotation matrix to translatedUV
-        // var rotatedU = cos(theta) * translatedUV.x - sin(theta) * translatedUV.y;
-        // var rotatedV = sin(theta) * translatedUV.x + cos(theta) * translatedUV.y;
-
-        // // Translate back so center of cursor is at its original position
-        // adjustedUV = vec2<f32>(rotatedU, rotatedV) + vec2<f32>(0.5, 0.5);
-
-        // Sample color from smallTexture and hitboxTexture
-        var colorFromSmallTexture = textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
-        var colorFromHitboxTexture = textureSampleBaseClampToEdge(hitboxTexture, mySampler, fragUV);
+        // Sample color from smallTexture and maskTexture
+        let colorFromSmallTexture = textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
+        let colorFromMaskTexture = textureSampleBaseClampToEdge(maskTexture, mySampler, fragUV);
         
         // If the alpha value of the pixel in smallTexture is less than 1.0, use the pixel from hitboxTexture
-        if (constants.cursorActive > 0.0 && colorFromSmallTexture.a < 1.0) {
+        if (colorFromSmallTexture.a < 1.0) {
             // if the hitbox color is black ignore it:
-            if (colorFromHitboxTexture.r == 0.0 && colorFromHitboxTexture.g == 0.0 && colorFromHitboxTexture.b == 0.0) {
-                return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+            if (colorFromMaskTexture.r == 0.0 && colorFromMaskTexture.g == 0.0 && colorFromMaskTexture.b == 0.0) {
+                return vec4<f32>(0.0, 1.0, 0.0, 0.0);
             }
             // if it's close to the center show it
             var cursorCenter = vec2<f32>(mousePosition.mousePosition.x * 2.0, mousePosition.mousePosition.y);
             var adjustedFragUV = vec2<f32>(fragUV.x * 2.0 , fragUV.y );
             var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
-            // Threshold distance from the cursor center to display colorFromHitboxTexture
-            // var thresholdDistance = min(halfCursorWidth * .23, constants.cursorHeight); // Adjust as needed
-            var thresholdDistance = 0.55;
+            var thresholdDistance = 0.05;
             if (distanceFromCenter <= thresholdDistance) {
-                var bias = 0.0; // Adjust as needed to bias more or less in favor of smallTexture
+                var bias = 0.9; // Adjust as needed to bias more or less in favor of smallTexture
                 var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
                 var beta = 1.0 - alpha; // Inverse alpha value for blending
-                
-                // if alpha is 1, it will show only colorFromSmallTexture.
-                // if alpha is 0, it will show only colorFromHitboxTexture.
-                // if alpha is between 0 and 1, it will blend the two textures based on the alpha value.
-                var blendedColor = alpha * colorFromSmallTexture + beta * colorFromHitboxTexture;
-                
+                // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 
+                var blendedColor = alpha * colorFromSmallTexture + beta * colorFromMaskTexture;
                 return blendedColor;
             }
         }
         return colorFromSmallTexture;
     }
-    return vec4<f32>(0.0, 0.0, 0.0, 0.0);         
+    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
 }
 `;
 
@@ -208,34 +204,26 @@ struct Constants {
 @binding(3) @group(0) var<uniform> mousePosition: MouseUniform;
 @binding(4) @group(0) var<uniform> constants: Constants;
  
-
-@compute @workgroup_size(1,1, 1)
+@compute @workgroup_size(8,8, 1)
 fn main(
     @builtin(global_invocation_id) id: vec3<u32>
 ) {
-    if (id.x != 0 && id.y != 0) { return; }
-    var halfCursorWidth = constants.cursorWidth / f32(constants.screenWidth) / 2.0;
-    var halfCursorHeight = constants.cursorHeight / f32(constants.screenHeight) / 2.0;
-    var thresholdDistance = constants.activeRadius;
+    let halfCursorWidth = constants.cursorWidth / f32(constants.screenWidth) / 2.0;
+    let halfCursorHeight = constants.cursorHeight / f32(constants.screenHeight) / 2.0;
+    let thresholdDistance = constants.activeRadius;
 
-    var pixelSize = vec2<f32>(0.000520, 0.000925);
-    var maxPixel: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 0.0);
-    hitboxOutput = vec4<f32>(0.0, 0.0, 0.0, 0.0);
-    // Iterate through pixels within the thresholdDistance
-    var leftBoundary = clamp(mousePosition.mousePosition.x -thresholdDistance, 0.0, 1.0);
-    var rightBoundary = clamp(mousePosition.mousePosition.x + thresholdDistance, 0.0, 1.0);
-    var bottomBoundary = clamp(mousePosition.mousePosition.y - thresholdDistance, 0.0, 1.0);
-    var topBoundary = clamp(mousePosition.mousePosition.y + thresholdDistance, 0.0, 1.0);
-    hitboxOutput.x = leftBoundary;
-    hitboxOutput.y = rightBoundary;
-    hitboxOutput.z = pixelSize.x;
-    hitboxOutput.w = pixelSize.y;
-    for (var x: f32 = leftBoundary; x <= rightBoundary; x+= pixelSize.x) {
-        for (var y: f32 = bottomBoundary; y <= topBoundary; y+= pixelSize.y) {
-            let uv: vec2<f32> = vec2<f32>(x, y);
-            var currentPixel = textureSampleBaseClampToEdge(hitboxTexture, mySampler, uv);
-            if (length(currentPixel) > length(maxPixel)) {
-                maxPixel = currentPixel;
+    let startX = max(mousePosition.mousePosition.x - thresholdDistance, 0.0);
+    let endX = min(mousePosition.mousePosition.x + thresholdDistance, 1.0);
+    let startY = max(mousePosition.mousePosition.y - thresholdDistance, 0.0);
+    let endY = min(mousePosition.mousePosition.y + thresholdDistance, 1.0);
+
+    var maxPixel = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    for (var x: f32 = startX; x <= endX; x += 1.0 / f32(constants.screenWidth)) {
+        for (var y: f32 = startY; y <= endY; y += 1.0 / f32(constants.screenHeight)) {
+            let pixelCoord = vec2<i32>(i32(x * f32(constants.screenWidth)), i32(y * f32(constants.screenHeight)));
+            let currentPixel = textureLoad(hitboxTexture, pixelCoord, 0);
+            if (length(currentPixel.rgb) > length(maxPixel.rgb)) {
+    //             maxPixel = currentPixel;
             }
         }
     }
@@ -289,7 +277,8 @@ let currentHighlightedHitbox = null;
 // not sure why these are on window object
 window.userString = "";
 window.userInput = 'intro';
-window.mainState = 'intro';
+// window.mainState = 'intro';
+window.mainState = 'side';
 window.cursorState = 'blank';
 
 let userKeyboardElement;
@@ -416,6 +405,8 @@ const defaultCursorEventHandlers = {
         // if they are in 'open' mode this makes the hand close:
         if (window.cursorState === 'open') {
             if (currentHighlightedHitbox?.name == 'handle') {
+                window.cursorState = 'open_hover';
+                // this.cursorVideoPlayer.interuptVideo('open_hover.webm');
                 userInputQueue = ['open_hover'];
                 return;
             } 
@@ -429,7 +420,7 @@ const defaultCursorEventHandlers = {
         if (window.cursorState === 'look') {
             // check if it's the green hitbox
             // todo: make this labelled hitboxes so playgraph has list of hitbox colors -> hitbox name
-            if (currentHighlightedHitbox.name == 'handle') {
+            if (currentHighlightedHitbox?.name == 'handle') {
                 userInputQueue = ['look_at_handle_enter'];
                 return;
             }
@@ -442,8 +433,12 @@ const defaultCursorEventHandlers = {
     },
     click: async event => {
         if (window.mainState === 'intro' && window.cursorState === 'look') {
-            window.userInput = 'turn_and_look';
+            window.userInput = 'side';
             return; 
+        }
+        if (window.mainState === 'side' && window.cursorState.includes('open_hover')) {
+            window.userInput = 'opened_lantern';
+            return;
         }
     },
     keydown: event => {
@@ -545,6 +540,13 @@ async function initWebGPU() {
         usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING
     });
 
+    // used for masks
+    maskVideoTexture = device.createTexture({
+        size: { width: screenWidth, height: screenHeight, depthOrArrayLayers: 1 },
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
+    });
+    
     // used for hitboxes
     hitboxVideoTexture = device.createTexture({
         size: { width: screenWidth, height: screenHeight, depthOrArrayLayers: 1 },
@@ -733,7 +735,7 @@ function createBindGroups() {
             { binding: 1, resource: cursorVideoTexture.createView() },
             { binding: 2, resource: { buffer: mousePositionBuffer } },
             { binding: 3, resource: { buffer: constantsBuffer } },
-            { binding: 4, resource: hitboxVideoTexture.createView() },
+            { binding: 4, resource: maskVideoTexture.createView() },
         ]
     });
 
@@ -814,7 +816,7 @@ async function renderFrame() {
     const renderPassDescriptor = {
         colorAttachments: [{
             view: currentTexture.createView(),
-            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+            clearValue: { r: 0.0, g: 0.0, b: 1.0, a: 1.0 },
             loadOp: 'clear',
             storeOp: 'store',
             loadValue: 'clear',
@@ -834,39 +836,45 @@ async function renderFrame() {
 
     renderPassEncoder.end();
 
+    await scanHitboxPixels(commandEncoder);
+}
+
+async function scanHitboxPixels(commandEncoder) {
     const computePassEncoder = commandEncoder.beginComputePass();
     computePassEncoder.setPipeline(hitboxPipeline);
     computePassEncoder.setBindGroup(0, hitboxBindGroup);
     // launches one thread per 9 pixels  (center pixel + 8 neighbors)
-    computePassEncoder.dispatchWorkgroups(1,1,1);
+    computePassEncoder.dispatchWorkgroups(8, 8, 1);
     // computePassEncoder.dispatchWorkgroups(1,1,1);
     computePassEncoder.end();
     commandEncoder.copyBufferToBuffer(
         hitboxOutputBuffer,
-        0, // Source offset
+        0,
         stagingBuffer,
-        0, // Destination offset
+        0,
         hitboxBufferSize
-      );
-      device.queue.submit([commandEncoder.finish()]);
-      await stagingBuffer.mapAsync(
+    );
+    device.queue.submit([commandEncoder.finish()]);
+    await stagingBuffer.mapAsync(
         GPUMapMode.READ,
-        0, // Offset
+        0,
         hitboxBufferSize // Length
-      );
-      const copyArrayBuffer = stagingBuffer.getMappedRange(0, hitboxBufferSize);
-      const data = copyArrayBuffer.slice();
-      stagingBuffer.unmap();
-      const pixelData = new Float32Array(data);
-    // currentHitboxList will have entries like:
-    //      matchPixel(pixel) { return pixel[1] > 0; },
-    //      name: 'handle'
-      if (window.mainVideoPlayer.currentHitboxList) {
+    );
+    const copyArrayBuffer = stagingBuffer.getMappedRange(0, hitboxBufferSize / 32);
+    const data = copyArrayBuffer.slice();
+    stagingBuffer.unmap();
+    const pixelData = new Float32Array(data);
+    if (window.mainVideoPlayer.currentHitboxList) {
+        // console.log(pixelData.slice(0, 5));
         currentHighlightedHitbox = window.mainVideoPlayer.currentHitboxList.find(hitbox => { if (hitbox.matchPixel(pixelData)) { return hitbox.name; } });
-      }
+        if (currentHighlightedHitbox) {
+            // console.log('found hitbox:', pixelData.slice(0, 5), currentHighlightedHitbox);
+        }
+    }
 }
 
 async function renderLoop() {
+    updateFPS();
     const textContainer = document.getElementById('textContainer');
     const latestLetterContainer = document.getElementById('latestLetterContainer');
 
@@ -913,7 +921,6 @@ async function renderLoop() {
         latestLetterContainer.textContent = ""; // Clear the latest letter when cursor is active
     }
     
-   
     // Determine the video currently playing
     // Main video player logic
     let currentMainVideo;
@@ -929,13 +936,16 @@ async function renderLoop() {
     } else if (window.cursorVideoPlayer.videoB.currentTime > 0 && !window.cursorVideoPlayer.videoB.paused && !window.cursorVideoPlayer.videoB.ended) {
         updateTextureIfNeeded(window.cursorVideoPlayer.videoB, cursorVideoTexture, { width: cursorWidth, height: cursorHeight }, 'cursor');
     }
-    let currentMaskVideo;
     if (window.mainVideoPlayer.maskVideoA.currentTime > 0 && !window.mainVideoPlayer.maskVideoA.paused && !window.mainVideoPlayer.maskVideoA.ended) {
-        updateTextureIfNeeded(window.mainVideoPlayer.maskVideoA, hitboxVideoTexture, { width: screenWidth, height: screenHeight }, 'mask');
+        updateTextureIfNeeded(window.mainVideoPlayer.maskVideoA, maskVideoTexture, { width: screenWidth, height: screenHeight }, 'mask');
     } else if (window.mainVideoPlayer.maskVideoB.currentTime > 0 && !window.mainVideoPlayer.maskVideoB.paused && !window.mainVideoPlayer.maskVideoB.ended) {
-        updateTextureIfNeeded(window.mainVideoPlayer.maskVideoB, hitboxVideoTexture, { width: screenWidth, height: screenHeight }, 'mask');
+        updateTextureIfNeeded(window.mainVideoPlayer.maskVideoB, maskVideoTexture, { width: screenWidth, height: screenHeight }, 'mask');
     }
-
+    if (window.mainVideoPlayer.hitboxVideoA.currentTime > 0 && !window.mainVideoPlayer.hitboxVideoA.paused && !window.mainVideoPlayer.hitboxVideoA.ended) {
+        updateTextureIfNeeded(window.mainVideoPlayer.hitboxVideoA, hitboxVideoTexture, { width: screenWidth, height: screenHeight }, 'mask');
+    } else if (window.mainVideoPlayer.hitboxVideoB.currentTime > 0 && !window.mainVideoPlayer.hitboxVideoB.paused && !window.mainVideoPlayer.hitboxVideoB.ended) {
+        updateTextureIfNeeded(window.mainVideoPlayer.hitboxVideoB, hitboxVideoTexture, { width: screenWidth, height: screenHeight }, 'mask');
+    }
     const currentTime = performance.now();
     const elapsedTime = (currentTime - startTime) / 1000.0;  // Convert to seconds
     // Update the uniform buffer with the new time value
@@ -946,7 +956,6 @@ async function renderLoop() {
             shudderAmount, rippleStrength, rippleFrequency, elapsedTime
         ]).buffer
     );
-
 
     // Render to the canvas using WebGPU
     await renderFrame();
@@ -975,7 +984,7 @@ window.onload = async function () {
             return;
         }
         if (event.key === "ArrowRight") {
-            window.mainState = "turn_and_look";
+            window.mainState = "side";
         } else if (event.key === "Backspace" || event.key === "Escape") {
             window.cursorState = "blank";
             window.userString = "";
@@ -983,6 +992,12 @@ window.onload = async function () {
         } else if (/^[a-zA-Z]$/.test(event.key)) {
             // For other input conditions
             window.userString += event.key.toLowerCase();
+            // differentiate between 'l' for look vs 'l' for light
+            // if (window.mainState === 'side') {
+            //     if (window.userString === 'l') {
+            //         window.userString = 'light_l';
+            //     }
+            // }
             userInputQueue.push(window.userString);
             isLetterAnimating = true;  // Set the flag
     
@@ -1005,17 +1020,14 @@ window.onload = async function () {
     // alphaCursor.setPlaygraph(alphaCursorPlaygraph);
     // CursorPlugin.setCursor(alphaCursor);
 
-    // get the 'l' video node
+    // get the blank video node
     const blank = window.Playgraph.getPlaygraph('one').cursor.nodes.find(node => node.id === 'blank');
-    // window.cursorVideoPlayer = new VideoPlayer(cursorPlaygraph, defaultCursorNextVideoStrategy, l);
-    // window.cursorVideoPlayer = new VideoPlayer(cursorPlaygraph, keyboardMatchingCursorNextVideoStrategy, blank, false);
     window.cursorVideoPlayer = new VideoPlayer(cursorPlaygraph, getNextCursorVideo, blank, false);
 
     const playgraph = window.Playgraph.getPlaygraph('one').main;
     const second = window.Playgraph.getPlaygraph('one').main.nodes.find(node => node.id === "intro");
-    // window.mainVideoPlayer = new VideoPlayer(playgraph, defaultNextVideoStrategy, second, true);
     window.mainVideoPlayer = new VideoPlayer(playgraph, mainNextVideoStrategy, second, true);
-    // window.mainVideoPlayer.currentNodeIndex = playgraph.nodes.length - 1;
+
     let bothVideosLoaded = 0;
     // Add listeners for various user interactions
     document.addEventListener('click', function playOnInteraction() {
@@ -1074,15 +1086,24 @@ function defaultCursorNextVideoStrategy(currentVideo) {
 
 function mainNextVideoStrategy(currentVideo) {
     if (window.mainState === 'intro') {
-        if (window.userInput === "turn_and_look") {
-            window.mainState = 'turn_and_look';
-            return '/main/turn_and_look.webm';
+        if (window.userInput === "side") {
+            window.mainState = 'side';
+            return '/main/side.webm';
         }
-        return '/main/i2_idle.webm';
+        return '/main/front_forward_idle.webm';
     }
-    if (window.mainState === 'turn_and_look') {
-        this.currentNodeIndex = this.playgraph.nodes.findIndex(node => node.id === 'turn_and_look_idle');
-        return '/main/turn_and_look_idle.webm';
+    if (window.mainState === 'side') {
+        if (window.userInput === 'opened_lantern') {
+            window.mainState = 'opened_lantern';
+            return '/main/opened_lantern.webm';
+        }
+        this.currentNodeIndex = this.playgraph.nodes.findIndex(node => node.id === 'side_idle');
+        return '/main/side_idle.webm';
+    }
+    if (window.mainState === 'opened_lantern') {
+        this.currentNodeIndex = this.playgraph.nodes.findIndex(node => node.id === 'opened_lantern_idle');
+        return '/main/opened_lantern_idle.webm';
+
     }
 }
 
@@ -1116,35 +1137,15 @@ function defaultNextVideoStrategy(currentVideo) {
     return nextVideoPath;
 }
 
-// function defaultNextVideoStrategy(currentVideo) {
-//     // console.log('getting next for ', currentVideo.src);
-//     const currentNode = this.playgraph.nodes[this.currentNodeIndex];
-//     const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
-//     let nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
-
-//     // Select the next edge based on the global userInput variable
-//     const nextEdges = currentNode.edges.filter(edge => edge.tags.includes(window.userInput));
-//     if (nextEdges.length > 0) {
-//         nextEdgeIndex = currentNode.edges.indexOf(nextEdges[0]);
-//     }
-
-//     const nextVideoPath = `/main/${currentNode.edges[nextEdgeIndex].id}`;
-//     // console.log('so next is');
-//     // console.log(nextVideoPath);
-//     // Update the current node index if we transitioned to a different node
-//     const nextNodeId = currentNode.edges[nextEdgeIndex].to;
-//     const nextNodeIndex = this.playgraph.nodes.findIndex(node => node.id === nextNodeId);
-//     if (nextNodeIndex !== -1) {
-//         this.currentNodeIndex = nextNodeIndex;
-//     }
-//     console.log(nextVideoPath);
-//     return nextVideoPath;
-// }
 
 const stateTransitions = {
     'blank': {
         'o': '/main/o2.webm',
-        'l': '/main/3l.webm',
+        'l': {
+            default: '/main/3l.webm',
+            'side': '/main/light_l2.webm',
+        },
+        'light_l': '/main/light_l2.webm',
     },
     'o': {
         'op': '/main/op4.webm',
@@ -1162,6 +1163,7 @@ const stateTransitions = {
         'open_hover': '/main/open_idle4.webm',
     },
     'l': {
+        'li': '/main/li.webm',
         'lo': '/main/3lo.webm',
     },
     'lo': {
@@ -1175,7 +1177,19 @@ const stateTransitions = {
     },
     'look_at_handle_exit': {
         'look': '/main/look_at_handle_exit2.webm'
-    }
+    },
+    'light_l': {
+        'li': '/main/li.webm',
+    },
+    'li': {
+        'lig': '/main/lig.webm',
+    },
+    'lig': {
+        'ligh': '/main/ligh.webm',
+    },
+    'ligh': {
+        'light': '/main/light.webm',
+    },
 };
 
 const autoTransitions = {
@@ -1200,7 +1214,13 @@ function getNextCursorVideo(currentVideo, playgraph, userInput) {
         return getDefaultVideoForState(window.cursorState) || currentVideo.src;
     }
 
-    const nextState = stateTransitions[window.cursorState] && stateTransitions[window.cursorState][nextUserInput];
+    let nextState = stateTransitions[window.cursorState] && stateTransitions[window.cursorState][nextUserInput];
+    if (typeof nextState === 'object') {
+        nextState = nextState[window.mainState];
+        if (!nextState) {
+            nextState = stateTransitions[window.cursorState][nextUserInput].default;
+        }
+    }
     if (nextState) {
         window.cursorState = nextUserInput;
         return nextState;
@@ -1223,9 +1243,26 @@ function getDefaultVideoForState(state) {
         'ope_idle': 'main/ope5_idle.webm',
         'open': 'main/open_idle4.webm',
         'open_idle': 'main/open_idle4.webm',
+        // 'light' sequence
+        // 'light_l': 'main/light_l_idle2.webm',
+        // 'light_l_idle': 'main/light_l_idle2.webm',
+        'li': 'main/li_idle.webm',
+        'li_idle': 'main/li_idle.webm',
+        'lig': 'main/lig_idle.webm',
+        'lig_idle': 'main/lig_idle.webm',
+        'ligh': 'main/ligh_idle.webm',
+        'ligh_idle': 'main/ligh_idle.webm',
+        'light': 'main/light_idle.webm',
+        'light_idle': 'main/light_idle.webm',
         // 'look' sequence
-        'l': 'main/stretch2_3l_idle.webm',
-        'l_idle': 'main/stretch2_3l_idle.webm',
+        'l': {
+            default: 'main/stretch2_3l_idle.webm',
+            'side': 'main/light_l_idle2.webm',
+        },
+        'l_idle': {
+            default: 'main/stretch2_3l_idle.webm',
+            side: 'main/light_l_idle2.webm',
+        },
         'lo': 'main/stretch_3lo_idle.webm',
         'lo_idle': 'main/stretch_3lo_idle.webm',
         'loo': 'main/3loo_idle.webm',
@@ -1240,6 +1277,10 @@ function getDefaultVideoForState(state) {
         'open_hover_idle': 'main/open_hover_idle3.webm',
         'open_hover_exit': 'main/open_hover_exit3.webm',
     };
-    return defaults[state];
+    let video = defaults[state];
+    if (typeof video === 'object') {
+        return video[window.mainState];
+    }
+    return video;
 }
 
