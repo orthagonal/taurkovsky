@@ -100,7 +100,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 
 const mainFragmentShaderCode = /* wgsl */`
 @group(0) @binding(0) var mySampler: sampler;
-@group(0) @binding(1) var myTexture: texture_2d<f32>;
+@group(0) @binding(1) var myTexture: texture_external;
 
 @fragment
 fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
@@ -127,10 +127,10 @@ struct Constants {
 };
 
 @group(0) @binding(0) var mySampler: sampler;
-@group(0) @binding(1) var smallTexture: texture_2d<f32>;
+@group(0) @binding(1) var smallTexture: texture_external;
 @group(0) @binding(2) var<uniform> mousePosition: MouseUniform;
 @group(0) @binding(3) var<uniform> constants: Constants;
-@group(0) @binding(4) var maskTexture: texture_2d<f32>;
+@group(0) @binding(4) var maskTexture: texture_external;
 
 @fragment
 fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
@@ -151,31 +151,93 @@ fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
 
         // Sample color from smallTexture and maskTexture
         let colorFromSmallTexture = textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
-        let colorFromMaskTexture = textureSampleBaseClampToEdge(maskTexture, mySampler, fragUV);
-        
-        // If the alpha value of the pixel in smallTexture is less than 1.0, use the pixel from hitboxTexture
-        if (colorFromSmallTexture.a < 1.0) {
-            // if the hitbox color is black ignore it:
-            if (colorFromMaskTexture.r == 0.0 && colorFromMaskTexture.g == 0.0 && colorFromMaskTexture.b == 0.0) {
-                return vec4<f32>(0.0, 1.0, 0.0, 0.0);
+            let colorFromMaskTexture = textureSampleBaseClampToEdge(maskTexture, mySampler, fragUV);
+            // If the alpha value of the pixel in smallTexture is less than 1.0, use the pixel from hitboxTexture
+            if (colorFromSmallTexture.a < 1.0) {
+                // if the hitbox color is black ignore it:
+                if (colorFromMaskTexture.r == 0.0 && colorFromMaskTexture.g == 0.0 && colorFromMaskTexture.b == 0.0) {
+                    return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+                }
+                // if it's close to the center show it
+                var cursorCenter = vec2<f32>(mousePosition.mousePosition.x * 2.0, mousePosition.mousePosition.y);
+                var adjustedFragUV = vec2<f32>(fragUV.x * 2.0 , fragUV.y );
+                var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
+                var thresholdDistance = 0.05;
+                if (distanceFromCenter <= thresholdDistance) {
+                    var bias = 0.9; // Adjust as needed to bias more or less in favor of smallTexture
+                    var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
+                    var beta = 1.0 - alpha; // Inverse alpha value for blending
+                    // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 
+                    var blendedColor = alpha * colorFromSmallTexture + beta * colorFromMaskTexture;
+                    return blendedColor;
+                }
             }
-            // if it's close to the center show it
-            var cursorCenter = vec2<f32>(mousePosition.mousePosition.x * 2.0, mousePosition.mousePosition.y);
-            var adjustedFragUV = vec2<f32>(fragUV.x * 2.0 , fragUV.y );
-            var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
-            var thresholdDistance = 0.05;
-            if (distanceFromCenter <= thresholdDistance) {
-                var bias = 0.9; // Adjust as needed to bias more or less in favor of smallTexture
-                var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
-                var beta = 1.0 - alpha; // Inverse alpha value for blending
-                // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 
-                var blendedColor = alpha * colorFromSmallTexture + beta * colorFromMaskTexture;
-                return blendedColor;
-            }
-        }
         return colorFromSmallTexture;
     }
-    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    return vec4<f32>(0.0, 0.0, 1.0, 1.0);
+}
+`;
+
+const cursorFragmentShaderCodeNoMask = /* wgsl */`
+struct MouseUniform {
+  mousePosition: vec2<f32>
+};
+
+struct CursorUniform {
+  useMask: u32
+};
+
+struct Constants {
+  screenWidth: f32,
+  screenHeight: f32,
+  cursorWidth: f32,
+  cursorHeight: f32,
+  cursorActive: f32,
+  activeRadius: f32
+};
+
+@group(0) @binding(0) var mySampler: sampler;
+@group(0) @binding(1) var smallTexture: texture_external;
+@group(0) @binding(2) var<uniform> mousePosition: MouseUniform;
+@group(0) @binding(3) var<uniform> constants: Constants;
+
+@fragment
+fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
+  let halfCursorWidth = constants.cursorWidth / constants.screenWidth / 2.0;
+  let halfCursorHeight = constants.cursorHeight / constants.screenHeight / 2.0;
+  let leftBoundary = mousePosition.mousePosition.x - halfCursorWidth;
+  let rightBoundary = mousePosition.mousePosition.x + halfCursorWidth;
+  let bottomBoundary = mousePosition.mousePosition.y - halfCursorHeight;
+  let topBoundary = mousePosition.mousePosition.y + halfCursorHeight;
+
+  let isWithinCursor = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
+                      fragUV.y > bottomBoundary && fragUV.y < topBoundary;
+
+  if (isWithinCursor) {
+    let uCoord = (fragUV.x - leftBoundary) / (2.0 * halfCursorWidth);
+    let vCoord = (fragUV.y - bottomBoundary) / (2.0 * halfCursorHeight);
+    let adjustedUV = vec2<f32>(uCoord, vCoord);
+
+    let colorFromSmallTexture = textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
+    if (colorFromSmallTexture.a < 1.0) {
+        // if it's close to the center show itl
+        var cursorCenter = vec2<f32>(mousePosition.mousePosition.x * 2.0, mousePosition.mousePosition.y);
+        var adjustedFragUV = vec2<f32>(fragUV.x * 2.0 , fragUV.y );
+        var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
+        var thresholdDistance = 0.05;
+        if (distanceFromCenter <= thresholdDistance) {
+            var bias = 0.9; // Adjust as needed to bias more or less in favor of smallTexture
+            var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
+            var beta = 1.0 - alpha; // Inverse alpha value for blending
+            // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 
+            var blendedColor = alpha * colorFromSmallTexture;
+            return blendedColor;
+        }
+    }
+    return textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
+  }
+
+  return vec4<f32>(0.0, 0.0, 1.0, 1.0);
 }
 `;
 
@@ -200,9 +262,9 @@ struct Constants {
 // @binding(0) @group(0) var<storage, write> hitboxOutput: array<Data>;
 @binding(0) @group(0) var<storage, read_write> hitboxOutput: vec4<f32>;
 @binding(1) @group(0) var mySampler: sampler;
-@binding(2) @group(0) var hitboxTexture: texture_2d<f32>;
-@binding(3) @group(0) var<uniform> mousePosition: MouseUniform;
-@binding(4) @group(0) var<uniform> constants: Constants;
+@binding(2) @group(0) var<uniform> mousePosition: MouseUniform;
+@binding(3) @group(0) var<uniform> constants: Constants;
+@binding(4) @group(0) var hitboxTexture: texture_external; //texture_2d<f32>;
  
 @compute @workgroup_size(8,8, 1)
 fn main(
@@ -221,10 +283,10 @@ fn main(
     for (var x: f32 = startX; x <= endX; x += 1.0 / f32(constants.screenWidth)) {
         for (var y: f32 = startY; y <= endY; y += 1.0 / f32(constants.screenHeight)) {
             let pixelCoord = vec2<i32>(i32(x * f32(constants.screenWidth)), i32(y * f32(constants.screenHeight)));
-            let currentPixel = textureLoad(hitboxTexture, pixelCoord, 0);
-            if (length(currentPixel.rgb) > length(maxPixel.rgb)) {
-    //             maxPixel = currentPixel;
-            }
+            // let currentPixel = textureSampleBaseClampToEdge(hitboxTexture, mySampler, pixelCoord);
+            // if (length(currentPixel.rgb) > length(maxPixel.rgb)) {
+            //     maxPixel = currentPixel;
+            // }
         }
     }
     hitboxOutput = maxPixel;
@@ -288,15 +350,15 @@ let overlayCanvas, overlayContext;
 let hitboxOutputBuffer; // the gpu writes the hitbox data to this buffer
 let adapter, device, canvas, context;
 let mousePositionBuffer, constantsBuffer, vertexConstantsBuffer;
-let videoTexture, hitboxVideoTexture, cursorVideoTexture, extractedPixelTexture;
-let bindGroup, vertexUniformBindGroup;
+let bindGroup, vertexBindGroup;
 let mainVideoPipeline, cursorPipeline, hitboxPipeline;  // Pipeline for rendering the video
-let videoBindGroup, cursorBindGroup, hitboxBindGroup; 
+let videoBindGroupA, videoBindGroupB; 
+let cursorBindGroup, hitboxBindGroup; 
 let currentCursor = null;
 let linearSampler = null;
 let fragmentShaderModules = {};
 let defaultCursor, alphaCursor;
-let mainBGL, cursorBGL, hitboxBGL, vertexUniformBGL;
+let mainBGL, cursorBGL, hitboxBGL, vertexBGL;
 
 let currentHitboxList = false;
 let cursorActive = 0.0;  // 1.0 when cursor is 'active' and can interact with things
@@ -304,7 +366,6 @@ let cursorActive = 0.0;  // 1.0 when cursor is 'active' and can interact with th
 const textFlashAnimationDuration = 100;  // 500ms or 0.5 seconds
 let previousString = "";
 let wordCompleted = false;
-
 
 function setCursorActive(newValue) {
     cursorActive = newValue;
@@ -524,48 +585,9 @@ async function initWebGPU() {
     device.queue.writeBuffer(
         constantsBuffer,
         0,
-        new Float32Array([
-            screenWidth, screenHeight, cursorWidth, cursorHeight, cursorActive, activeRadius]).buffer
-    );
-
-    device.queue.writeBuffer(
-        constantsBuffer,
-        0,
         new Float32Array([screenWidth, screenHeight, cursorWidth, cursorHeight, cursorActive, activeRadius]).buffer
     );
 
-    videoTexture = device.createTexture({
-        size: { width: screenWidth, height: screenHeight, depthOrArrayLayers: 1 },
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING
-    });
-
-    // used for masks
-    maskVideoTexture = device.createTexture({
-        size: { width: screenWidth, height: screenHeight, depthOrArrayLayers: 1 },
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
-    });
-    
-    // used for hitboxes
-    hitboxVideoTexture = device.createTexture({
-        size: { width: screenWidth, height: screenHeight, depthOrArrayLayers: 1 },
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
-    });
-
-    cursorVideoTexture = device.createTexture({
-        size: { width: cursorWidth, height: cursorHeight, depthOrArrayLayers: 1 },
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING
-    });
-
-    extractedPixelTexture = device.createTexture({
-        size: { width: cursorWidth, height: cursorHeight, depthOrArrayLayers: 1 },
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_SRC
-    });
-   
     linearSampler = device.createSampler({
         magFilter: 'linear',
         minFilter: 'linear',
@@ -585,6 +607,9 @@ async function initWebGPU() {
     fragmentShaderModules.default = device.createShaderModule({
         code: cursorFragmentShaderCode
     });
+    fragmentShaderModules.cursorNoMask = device.createShaderModule({
+        code: cursorFragmentShaderCodeNoMask
+    });
     fragmentShaderModules.cursor1 = device.createShaderModule({
         code: cursorFragmentShaderCode
     });
@@ -598,7 +623,7 @@ async function initWebGPU() {
 }
 
 function createPipeline(cursorType) {
-    vertexUniformBGL = device.createBindGroupLayout({
+    vertexBGL = device.createBindGroupLayout({
         entries: [
             { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }
         ]
@@ -607,7 +632,7 @@ function createPipeline(cursorType) {
     mainBGL = device.createBindGroupLayout({
         entries: [
             { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-            { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+            { binding: 1, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
             { binding: 2, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
 
         ]
@@ -615,7 +640,7 @@ function createPipeline(cursorType) {
     
     mainVideoPipeline = device.createRenderPipeline({
         layout: device.createPipelineLayout({
-            bindGroupLayouts: [mainBGL, vertexUniformBGL],            
+            bindGroupLayouts: [mainBGL, vertexBGL],            
         }),
         vertex: {
             module: fragmentShaderModules.defaultVertex,
@@ -646,18 +671,63 @@ function createPipeline(cursorType) {
         },
     });
 
-    cursorBGL = device.createBindGroupLayout({
+    // this needs to be updated every time there is a change in whether the mask is available or not
+    // the non-mask version takes 4 bindgroups, the mask version takes 5
+    // not sure how to coordinate all of
+    updateCursorPipeline(cursorType);
+
+    hitboxBGL = device.createBindGroupLayout({
         entries: [
-            { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-            { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
-            { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-            { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-            { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, externalTexture: {} },
         ]
     });
+
+    // Create a compute pipeline
+    hitboxPipeline = device.createComputePipeline({
+        layout: device.createPipelineLayout({ bindGroupLayouts: [hitboxBGL] }),
+        compute: {
+            module: device.createShaderModule({ code: cursorHitboxShaderCode }), // computeShaderCode contains the WGSL code above
+            entryPoint: 'main',
+        },
+    });
+    vertexBindGroup = device.createBindGroup({
+        layout: vertexBGL,
+        entries: [
+            { binding: 0, resource: { buffer: vertexConstantsBuffer } }
+        ]
+    });
+}
+
+// cursor pipieline needs to be updated every time there is a change in whether the mask is available or not
+function updateCursorPipeline(cursorType, maskElement) {
+    if (maskElement) {
+        cursorBGL = device.createBindGroupLayout({ 
+            entries: [
+                { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+                { binding: 1, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
+                { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+                { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+                { binding: 4, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} }
+            ] 
+        });
+    } else {
+        cursorType = 'cursorNoMask';
+        cursorBGL = device.createBindGroupLayout({ 
+            entries: [
+                { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+                { binding: 1, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
+                { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+                { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+            ] 
+        });
+    }
     cursorPipeline = device.createRenderPipeline({
         layout: device.createPipelineLayout({
-            bindGroupLayouts: [ cursorBGL ],
+            bindGroupLayouts: [cursorBGL],
         }),
         vertex: {
             module: fragmentShaderModules.cursorVertex,
@@ -687,118 +757,6 @@ function createPipeline(cursorType) {
             stripIndexFormat: 'uint32'
         },
     });
-
-    hitboxBGL = device.createBindGroupLayout({
-        entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-            { binding: 4, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-        ]
-    });
-
-    // Create a compute pipeline
-    hitboxPipeline = device.createComputePipeline({
-        layout: device.createPipelineLayout({ bindGroupLayouts: [hitboxBGL] }),
-        compute: {
-            module: device.createShaderModule({ code: cursorHitboxShaderCode }), // computeShaderCode contains the WGSL code above
-            entryPoint: 'main',
-        },
-    });
-    
-    createBindGroups();
-}
-
-function createBindGroups() {
-    vertexUniformBindGroup = device.createBindGroup({
-        layout: vertexUniformBGL,
-        entries: [
-            { binding: 0, resource: { buffer: vertexConstantsBuffer } }
-        ]
-    });
-    
-    // Create bind group for rendering the video
-    videoBindGroup = device.createBindGroup({
-        layout: mainBGL,
-        entries: [
-            { binding: 0, resource: linearSampler },
-            { binding: 1, resource: videoTexture.createView() },
-            { binding: 2, resource: { buffer: constantsBuffer } },
-        ]
-    });
-
-    cursorBindGroup = device.createBindGroup({
-        layout: cursorBGL,
-        entries: [
-            { binding: 0, resource: linearSampler },
-            { binding: 1, resource: cursorVideoTexture.createView() },
-            { binding: 2, resource: { buffer: mousePositionBuffer } },
-            { binding: 3, resource: { buffer: constantsBuffer } },
-            { binding: 4, resource: maskVideoTexture.createView() },
-        ]
-    });
-
-    // hitboxBufferSize = cursorWidth * cursorHeight * 32;
-    hitboxBufferSize = 32 * 4;
-    hitboxOutputBuffer = device.createBuffer({
-        size: hitboxBufferSize,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-    });
-
-    hitboxBindGroup = device.createBindGroup({
-        layout: hitboxBGL,
-        entries: [
-            { binding: 0, resource: { buffer: hitboxOutputBuffer, type: 'storage' } },
-            { binding: 1, resource: linearSampler },
-            { binding: 2, resource: hitboxVideoTexture.createView() },
-            { binding: 3, resource: { buffer: mousePositionBuffer } },
-            { binding: 4, resource: { buffer: constantsBuffer } },
-        ],
-    });
-    stagingBuffer = device.createBuffer({
-        size: hitboxBufferSize,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
-      });
-}
-let  hitboxBufferSize;
-let stagingBuffer;
-
-function updateTextureFromVideo(videoElement, targetTexture, dimensions) {
-    const { width, height } = dimensions;
-    const offscreenCanvas = new OffscreenCanvas(width, height);
-    const ctx = offscreenCanvas.getContext('2d');
-    ctx.drawImage(videoElement, 0, 0, width, height);
-
-    const imageData = ctx.getImageData(0, 0, width, height);
-    device.queue.writeTexture(
-        { texture: targetTexture },
-        imageData.data,
-        {                                  // Data layout
-            offset: 0,
-            bytesPerRow: 4 * width,       // Updated to use width, assuming each pixel is 4 bytes (RGBA)
-            rowsPerImage: height
-        },
-        { width: width, height: height, depthOrArrayLayers: 1 }  // Size
-    );
-}
-
-// Object to store the last time a frame was fetched for each video
-const lastVideoFrameTime = {
-    main: null,
-    cursor: null,
-    mask: null
-};
-
-function updateTextureIfNeeded(video, texture, dimensions, videoType) {
-    if (!video) return;
-
-    // Check if video's currentTime is different from the last stored time
-    if (lastVideoFrameTime[videoType] !== video.currentTime) {
-        updateTextureFromVideo(video, texture, dimensions);
-        // Update the last fetched time for this video
-        lastVideoFrameTime[videoType] = video.currentTime;
-    }
 }
 
 async function renderFrame() {
@@ -816,7 +774,7 @@ async function renderFrame() {
     const renderPassDescriptor = {
         colorAttachments: [{
             view: currentTexture.createView(),
-            clearValue: { r: 0.0, g: 0.0, b: 1.0, a: 1.0 },
+            clearValue: { r: 1.0, g: 0.0, b: 0.0, a: 1.0 },
             loadOp: 'clear',
             storeOp: 'store',
             loadValue: 'clear',
@@ -825,21 +783,102 @@ async function renderFrame() {
     const commandEncoder = device.createCommandEncoder();
     const renderPassEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
 
-    renderPassEncoder.setPipeline(mainVideoPipeline);
-    renderPassEncoder.setBindGroup(0, videoBindGroup);
-    renderPassEncoder.setBindGroup(1, vertexUniformBindGroup);
-    renderPassEncoder.draw(4, 1, 0, 0);
+    // const activeVideo = window.mainVideoPlayer.videoA.readyState >= 2 ? window.mainVideoPlayer.videoA 
+    //     : window.mainVideoPlayer.videoB.readyState >= 2 ? window.mainVideoPlayer.videoB 
+    //     : false;
+    //window.mainVideoPlayer.activeVideos.main;
+    // Create external texture and bind group if needed
 
-    renderPassEncoder.setPipeline(cursorPipeline);
-    renderPassEncoder.setBindGroup(0, cursorBindGroup);
-    renderPassEncoder.draw(4, 1, 0, 0);
-
+    // Wait for the video frame to update
+    window.mainVideoPlayer.renderFrame(renderPassEncoder);
     renderPassEncoder.end();
+    device.queue.submit([commandEncoder.finish()]);
 
-    await scanHitboxPixels(commandEncoder);
+    // await scanHitboxPixels(commandEncoder);
+}
+
+async function renderLoop() {
+    renderLoopCount++;
+    updateFPS();
+    if (renderLoopCount % 30 === 0) {
+        // console.time('dom_render');
+        const textContainer = document.getElementById('textContainer');
+        const latestLetterContainer = document.getElementById('latestLetterContainer');
+
+        textContainer.style.left = `${mouseXNormalized * 100}%`;
+        textContainer.style.top = `${20 + mouseYNormalized * 100}%`;
+        if (!cursorActive) {
+            if (window.userString !== previousString) {
+                const lastChar = window.userString.charAt(window.userString.length - 1);
+                latestLetterContainer.textContent = lastChar;
+        
+                // Set position based on mouseXNormalized and mouseYNormalized
+                // Assuming these values are in percentage (0-100), you might need to adjust this calculation
+                // latestLetterContainer.style.left = `${mouseXNormalized * 100}%`;
+                // latestLetterContainer.style.top = `${mouseYNormalized * 100}%`;
+        
+                latestLetterContainer.classList.add("blur-animation");
+        
+                setTimeout(() => {
+                    latestLetterContainer.classList.remove("blur-animation");
+                }, 500);
+        
+                setTimeout(() => {
+                    latestLetterContainer.textContent = "";
+                }, 1000); // 500ms (effect duration) + 500ms (additional delay) = 1000ms or 1 second
+        
+                previousString = window.userString;
+            }
+        
+            textContainer.textContent = window.userString;
+            textContainer.style.color = 'white'; 
+        
+            if (wordCompleted) {
+                textContainer.classList.add("flash-animation");
+        
+                setTimeout(() => {
+                    textContainer.classList.remove("flash-animation");
+                }, 500);
+                wordCompleted = false;
+            }
+        
+        } else {
+            window.userString = "";
+            textContainer.textContent = "";
+            latestLetterContainer.textContent = ""; // Clear the latest letter when cursor is active
+        }
+        // console.timeEnd('dom_render');
+    }
+    // Determine the video currently playing
+    // Main video player logic
+    // console.time('texture_copies');;
+    let currentMainVideo;
+    const currentTime = performance.now();
+    const elapsedTime = (currentTime - startTime) / 1000.0;  // Convert to seconds
+    // console.timeEnd('texture_copies');
+    // Update the uniform buffer with the new time value
+    device.queue.writeBuffer(
+        vertexConstantsBuffer,
+        0,
+        new Float32Array([
+            shudderAmount, rippleStrength, rippleFrequency, elapsedTime
+        ]).buffer
+    );
+
+    // update any bindgroups or videos
+    updateTextures(); 
+    // Render to the canvas using WebGPU
+    // console.time('render_frame_time');
+    await renderFrame();
+    // console.timeEnd('render_frame_time');
+    // Call this function continuously to keep updating
+    requestAnimationFrame(renderLoop);
 }
 
 async function scanHitboxPixels(commandEncoder) {
+    if (!hitboxOutputBuffer) {
+        return;
+    }
     const computePassEncoder = commandEncoder.beginComputePass();
     computePassEncoder.setPipeline(hitboxPipeline);
     computePassEncoder.setBindGroup(0, hitboxBindGroup);
@@ -847,6 +886,7 @@ async function scanHitboxPixels(commandEncoder) {
     computePassEncoder.dispatchWorkgroups(8, 8, 1);
     // computePassEncoder.dispatchWorkgroups(1,1,1);
     computePassEncoder.end();
+    
     commandEncoder.copyBufferToBuffer(
         hitboxOutputBuffer,
         0,
@@ -861,7 +901,7 @@ async function scanHitboxPixels(commandEncoder) {
         hitboxBufferSize // Length
     );
     const copyArrayBuffer = stagingBuffer.getMappedRange(0, hitboxBufferSize / 32);
-    const data = copyArrayBuffer.slice();
+    const data = copyArrayBuffer.slice(); 
     stagingBuffer.unmap();
     const pixelData = new Float32Array(data);
     if (window.mainVideoPlayer.currentHitboxList) {
@@ -873,95 +913,99 @@ async function scanHitboxPixels(commandEncoder) {
     }
 }
 
-async function renderLoop() {
-    updateFPS();
-    const textContainer = document.getElementById('textContainer');
-    const latestLetterContainer = document.getElementById('latestLetterContainer');
+// Object to store the last time a frame was fetched for each video
+const lastVideoFrameTime = {
+    main: null,
+    cursor: null,
+    mask: null,
+    hitbox: null
+};
 
-    textContainer.style.left = `${mouseXNormalized * 100}%`;
-    textContainer.style.top = `${20 + mouseYNormalized * 100}%`;
-    if (!cursorActive) {
-        if (window.userString !== previousString) {
-            const lastChar = window.userString.charAt(window.userString.length - 1);
-            latestLetterContainer.textContent = lastChar;
-    
-            // Set position based on mouseXNormalized and mouseYNormalized
-            // Assuming these values are in percentage (0-100), you might need to adjust this calculation
-            // latestLetterContainer.style.left = `${mouseXNormalized * 100}%`;
-            // latestLetterContainer.style.top = `${mouseYNormalized * 100}%`;
-    
-            latestLetterContainer.classList.add("blur-animation");
-    
-            setTimeout(() => {
-                latestLetterContainer.classList.remove("blur-animation");
-            }, 500);
-    
-            setTimeout(() => {
-                latestLetterContainer.textContent = "";
-            }, 1000); // 500ms (effect duration) + 500ms (additional delay) = 1000ms or 1 second
-    
-            previousString = window.userString;
-        }
-    
-        textContainer.textContent = window.userString;
-        textContainer.style.color = 'white'; 
-    
-        if (wordCompleted) {
-            textContainer.classList.add("flash-animation");
-    
-            setTimeout(() => {
-                textContainer.classList.remove("flash-animation");
-            }, 500);
-            wordCompleted = false;
-        }
-    
-    } else {
-        window.userString = "";
-        textContainer.textContent = "";
-        latestLetterContainer.textContent = ""; // Clear the latest letter when cursor is active
-    }
-    
-    // Determine the video currently playing
-    // Main video player logic
-    let currentMainVideo;
-    if (window.mainVideoPlayer.videoA.currentTime > 0 && !window.mainVideoPlayer.videoA.paused && !window.mainVideoPlayer.videoA.ended) {
-        updateTextureIfNeeded(window.mainVideoPlayer.videoA, videoTexture, { width: screenWidth, height: screenHeight }, 'main');
-    } else if (window.mainVideoPlayer.videoB.currentTime > 0 && !window.mainVideoPlayer.videoB.paused && !window.mainVideoPlayer.videoB.ended) {
-        updateTextureIfNeeded(window.mainVideoPlayer.videoB, videoTexture, { width: screenWidth, height: screenHeight }, 'main');
-    }
-    // Cursor video player logic
-    let currentCursorVideo;
-    if (window.cursorVideoPlayer.videoA.currentTime > 0 && !window.cursorVideoPlayer.videoA.paused && !window.cursorVideoPlayer.videoA.ended) {
-        updateTextureIfNeeded(window.cursorVideoPlayer.videoA, cursorVideoTexture, { width: cursorWidth, height: cursorHeight }, 'cursor');
-    } else if (window.cursorVideoPlayer.videoB.currentTime > 0 && !window.cursorVideoPlayer.videoB.paused && !window.cursorVideoPlayer.videoB.ended) {
-        updateTextureIfNeeded(window.cursorVideoPlayer.videoB, cursorVideoTexture, { width: cursorWidth, height: cursorHeight }, 'cursor');
-    }
-    if (window.mainVideoPlayer.maskVideoA.currentTime > 0 && !window.mainVideoPlayer.maskVideoA.paused && !window.mainVideoPlayer.maskVideoA.ended) {
-        updateTextureIfNeeded(window.mainVideoPlayer.maskVideoA, maskVideoTexture, { width: screenWidth, height: screenHeight }, 'mask');
-    } else if (window.mainVideoPlayer.maskVideoB.currentTime > 0 && !window.mainVideoPlayer.maskVideoB.paused && !window.mainVideoPlayer.maskVideoB.ended) {
-        updateTextureIfNeeded(window.mainVideoPlayer.maskVideoB, maskVideoTexture, { width: screenWidth, height: screenHeight }, 'mask');
-    }
-    if (window.mainVideoPlayer.hitboxVideoA.currentTime > 0 && !window.mainVideoPlayer.hitboxVideoA.paused && !window.mainVideoPlayer.hitboxVideoA.ended) {
-        updateTextureIfNeeded(window.mainVideoPlayer.hitboxVideoA, hitboxVideoTexture, { width: screenWidth, height: screenHeight }, 'mask');
-    } else if (window.mainVideoPlayer.hitboxVideoB.currentTime > 0 && !window.mainVideoPlayer.hitboxVideoB.paused && !window.mainVideoPlayer.hitboxVideoB.ended) {
-        updateTextureIfNeeded(window.mainVideoPlayer.hitboxVideoB, hitboxVideoTexture, { width: screenWidth, height: screenHeight }, 'mask');
-    }
-    const currentTime = performance.now();
-    const elapsedTime = (currentTime - startTime) / 1000.0;  // Convert to seconds
-    // Update the uniform buffer with the new time value
-    device.queue.writeBuffer(
-        vertexConstantsBuffer,
-        0,
-        new Float32Array([
-            shudderAmount, rippleStrength, rippleFrequency, elapsedTime
-        ]).buffer
-    );
+function updateHitboxBindGroup() {
+    // hitboxBufferSize = cursorWidth * cursorHeight * 32;
+    hitboxBufferSize = 32 * 4;
+    hitboxOutputBuffer = device.createBuffer({
+        size: hitboxBufferSize,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+    });
 
-    // Render to the canvas using WebGPU
-    await renderFrame();
-    // Call this function continuously to keep updating
-    requestAnimationFrame(renderLoop);
+    let entries = [
+        { binding: 0, resource: { buffer: hitboxOutputBuffer, type: 'storage' } },
+        { binding: 1, resource: linearSampler },
+        { binding: 2, resource: { buffer: mousePositionBuffer } },
+        { binding: 3, resource: { buffer: constantsBuffer } },
+    ];
+    // Check if the mask video is present and add it to the bind group
+    if (window.mainVideoPlayer.activeVideos.hitbox && 
+        window.mainVideoPlayer.activeVideos.hitbox.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        const hitboxVideoExternalTexture = device.importExternalTexture({ source: window.mainVideoPlayer.activeVideos.hitbox });
+        entries.push({ binding: 4, resource: hitboxVideoExternalTexture });
+    }
+    hitboxBindGroup = device.createBindGroup({
+        layout: hitboxBGL,
+        entries
+    });
+    stagingBuffer = device.createBuffer({
+        size: hitboxBufferSize,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+      });
 }
+let  hitboxBufferSize;
+let stagingBuffer;
+
+function videoNeedsUpdate(video, videoType) {
+    if (lastVideoFrameTime[videoType] !== video?.currentTime && video.readyState >= 2) {
+        lastVideoFrameTime[videoType] = video.currentTime;
+        return true;
+    }
+    return false;
+}
+
+function updateCursorBindGroup(hasMaskVideo) {
+    const cursorExternalTexture = device.importExternalTexture({ source: window.cursorVideoPlayer.activeVideos.main });
+    if (hasMaskVideo && videoNeedsUpdate(window.cursorVideoPlayer.activeVideos.mask, 'mask')) {
+        updateCursorPipeline('cursor1', true);
+        const maskVideoExternalTexture = device.importExternalTexture({ source: window.cursorVideoPlayer.activeVideos.mask });
+        // Mask video is available, use the bind group with mask texture
+        return device.createBindGroup({
+            layout: cursorBGL,
+            entries: [
+            { binding: 0, resource: linearSampler },
+            { binding: 1, resource: cursorExternalTexture },
+            { binding: 2, resource: { buffer: mousePositionBuffer } },
+            { binding: 3, resource: { buffer: constantsBuffer } },
+            { binding: 4, resource: maskVideoExternalTexture }, // Mask texture
+            ]
+        });
+    } else {
+        updateCursorPipeline('cursorNoMask', false);
+        // Mask video is unavailable, use the bind group without mask texture
+      return device.createBindGroup({
+        layout: cursorBGL,
+        entries: [
+          { binding: 0, resource: linearSampler },
+          { binding: 1, resource: cursorExternalTexture },
+          { binding: 2, resource: { buffer: mousePositionBuffer } },
+          { binding: 3, resource: { buffer: constantsBuffer } },
+        ]
+      });
+    }
+  }
+  
+let mainVideo = null;
+
+async function updateTextures() {
+    // if (videoNeedsUpdate(window.cursorVideoPlayer.activeVideos.main, 'cursor')) {
+        // Update the cursor bind group based on the chosen pipeline
+        //  cursorBindGroup = updateCursorBindGroup(!!window.cursorVideoPlayer.activeVideos.mask);
+    // }
+    // update hitbox video
+    if (videoNeedsUpdate(window.mainVideoPlayer.activeVideos.hitbox, 'hitbox')) {
+        updateHitboxBindGroup();
+    }
+}
+
+let renderLoopCount = 0;
 
 window.onload = async function () {   
     overlayCanvas = document.getElementById("overlayCanvas");
@@ -1008,7 +1052,6 @@ window.onload = async function () {
         }
     });
     
-
     defaultCursor = new CursorPlugin(cursorVideoTexture, cursorFragmentShaderCode, defaultCursorEventHandlers);
     defaultCursor.setPlaygraph(cursorPlaygraph);
     // Set this default cursor as the current cursor
@@ -1022,18 +1065,99 @@ window.onload = async function () {
 
     // get the blank video node
     const blank = window.Playgraph.getPlaygraph('one').cursor.nodes.find(node => node.id === 'blank');
-    window.cursorVideoPlayer = new VideoPlayer(cursorPlaygraph, getNextCursorVideo, blank, false);
+    // window.cursorVideoPlayer = new VideoPlayer(device, cursorPlaygraph, getNextCursorVideo, blank, false);
 
     const playgraph = window.Playgraph.getPlaygraph('one').main;
     const second = window.Playgraph.getPlaygraph('one').main.nodes.find(node => node.id === "intro");
-    window.mainVideoPlayer = new VideoPlayer(playgraph, mainNextVideoStrategy, second, true);
 
+    // window.mainVideoPlayer.videoA.onplay = () => {
+    //     console.log('init vid a');
+    //     mainExternalTextureA = device.importExternalTexture({ source: window.mainVideoPlayer.videoA });
+    //     window.mainVideoPlayer.videoA.bindGroup = device.createBindGroup({
+    //         layout: mainBGL,
+    //         entries: [
+    //             { binding: 0, resource: linearSampler },
+    //             { binding: 1, resource: mainExternalTextureA },
+    //             { binding: 2, resource: { buffer: constantsBuffer } },
+    //         ]
+    //     });
+    //     window.mainVideoPlayer.videoA.onplay = null;
+    // }
+    // window.mainVideoPlayer.videoB.onplay = () => {
+    //     console.log('onplay vid b!');
+    //     mainExternalTextureB = device.importExternalTexture({ source: window.mainVideoPlayer.videoB });
+    //     window.mainVideoPlayer.videoB.bindGroup = device.createBindGroup({
+    //         layout: mainBGL,
+    //         entries: [
+    //             { binding: 0, resource: linearSampler },
+    //             { binding: 1, resource: mainExternalTextureB },
+    //             { binding: 2, resource: { buffer: constantsBuffer } },
+    //         ]
+    //     });
+    //     window.mainVideoPlayer.videoB.onplay = null;
+    // }
+    // Create the sampler and bind group for rendering the video
     let bothVideosLoaded = 0;
     // Add listeners for various user interactions
-    document.addEventListener('click', function playOnInteraction() {
+    console.log('add listeners');
+    document.addEventListener('click', async function playOnInteraction() {
+        console.log('click');
+        const gpuOptions = {
+            device,
+            context,
+            bindGroupLayout: mainBGL,
+            sampler: linearSampler,
+            vertexBGL,
+            vertexBindGroup: vertexBindGroup,
+            vertexShader: vertexShaderCode,
+            cursorBGL,
+            hitboxBGL,
+            fragmentShader: mainFragmentShaderCode,
+            constants: constantsBuffer,
+        }
+        window.mainVideoPlayer = new VideoPlayer(gpuOptions, playgraph, mainNextVideoStrategy, second, true);
+
+        // move this to the init after the videoA starts playing then there's a texture for it to import 
+        // const mainExternalTexture = device.importExternalTexture({ source: window.mainVideoPlayer.activeVideos.main });
+        // // // Create bind group for rendering the video
+        // videoBindGroupA = device.createBindGroup({
+        //     layout: mainBGL,
+        //     entries: [
+        //         { binding: 0, resource: linearSampler },
+        //         { binding: 1, resource: mainExternalTexture },
+        //         { binding: 2, resource: { buffer: constantsBuffer } },
+        //     ]
+        // });
+        // const cursorExternalTexture = device.importExternalTexture({ source: window.cursorVideoPlayer.activeVideos.main }); 
+        // let entries = [
+        //     { binding: 0, resource: linearSampler },
+        //     { binding: 1, resource: cursorExternalTexture },
+        //     { binding: 2, resource: { buffer: mousePositionBuffer } },
+        //     { binding: 3, resource: { buffer: constantsBuffer } }
+        // ];
+        // // Check if the mask video is present and add it to the bind group
+        // if (window.mainVideoPlayer.activeVideos.mask && 
+        //     window.mainVideoPlayer.activeVideos.mask.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        //     const maskVideoExternalTexture = device.importExternalTexture({ source: window.mainVideoPlayer.activeVideos.mask });
+        //     entries.push({ binding: 4, resource: maskVideoExternalTexture });
+        // }
+        // cursorBindGroup = device.createBindGroup({
+        //     layout: cursorBGL,
+        //     entries: entries
+        // });
         renderLoop();
+        // window.mainVideoPlayer.videoA.play();
+        console.log('rendered loop', window.mainVideoPlayer.videoA.src);
+        // wait until it's ready to play:
+        while (window.mainVideoPlayer.videoA.readyState < 2) {
+            console.log('waiting for ready state');
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
         if (window.mainVideoPlayer.videoA.readyState > 3) {
+            console.log('here');
             window.mainVideoPlayer.videoA.play();
+            // window.mainVideoPlayer.videoA.activateTexture();
+            
             // Preload next video
             const nextVideoPath = window.mainVideoPlayer.getNextVideoStrategy(window.mainVideoPlayer.videoA);
             window.mainVideoPlayer.videoB.src = nextVideoPath;
@@ -1049,17 +1173,16 @@ window.onload = async function () {
                 document.removeEventListener('click', playOnInteraction);
             }
         }
-        if (window.cursorVideoPlayer.videoA.readyState > 3) {
-            window.cursorVideoPlayer.videoA.play();
-            // Preload next video
-            const nextVideoPath = window.cursorVideoPlayer.getNextVideoStrategy(window.cursorVideoPlayer.videoA);
-            window.cursorVideoPlayer.videoB.src = nextVideoPath;
-            if (++bothVideosLoaded === 2) {
-                document.removeEventListener('click', playOnInteraction);
-            }
-        }
+        // if (window.cursorVideoPlayer.videoA.readyState > 3) {
+        //     window.cursorVideoPlayer.videoA.play();
+        //     // Preload next video
+        //     const nextVideoPath = window.cursorVideoPlayer.getNextVideoStrategy(window.cursorVideoPlayer.videoA);
+        //     window.cursorVideoPlayer.videoB.src = nextVideoPath;
+        //     if (++bothVideosLoaded === 2) {
+        //         document.removeEventListener('click', playOnInteraction);
+        //     }
+        // }
     });
-    await renderFrame();
 };
 
 function defaultCursorNextVideoStrategy(currentVideo) {
@@ -1136,7 +1259,6 @@ function defaultNextVideoStrategy(currentVideo) {
 
     return nextVideoPath;
 }
-
 
 const stateTransitions = {
     'blank': {
