@@ -30,104 +30,64 @@ function extractWebmPaths(playgraph) {
     return webmPaths;
 }
 
+/*
+    manages continuity and switching solely forthe HTML5 video elements:
+    - no rendering or graphics logic exists in this class 
+    - it just provides the current frame via 'getCurrentFrame'
+    - all state management should be contained in the getNextVideoStrategy function
+    - getNextVideoStrategy should return the path of the next video to play
+    - just wrap your getNextVideoStrategy to make '_hitbox' or '_mask' etc versions of the corresponding video
+    - any buffering of videos to force sequentiality should be done in getNextVideoStrategy
+*/
 
 class VideoPlayer {
-    constructor(webgpu, playgraph, getNextVideoStrategy, autoStart = true) {
+    constructor(playgraph, getNextVideoStrategy) {
         this.currentVideo = null;
         this.nextVideo = null;
         this.getNextVideoStrategy = getNextVideoStrategy;
-        this.blocked = true;
-        // load all videos
+
+        // Extract .webm paths and create video elements
         const webmPaths = extractWebmPaths(playgraph);
-        console.log(webmPaths);
         this.videoElements = {};
-        for (let i = 0; i < webmPaths.length; i++) {
-            const path = webmPaths[i];
+        webmPaths.forEach(path => {
             const videoElement = document.createElement('video');
             videoElement.preload = 'auto';
             videoElement.src = path;
             videoElement.load();
             videoElement.style.pointerEvents = "none";
             videoElement.crossOrigin = 'anonymous';
-            // video.ontimeupdate = this.updateTime.bind(this);
-            // // Store the video element in the videoElements object
-            this.videoElements[path] = {
-                videoElement,
-            };
-        }
-        // Create pipeline
-        const vertexModule = webgpu.device.createShaderModule({ code: webgpu.vertexShader });
-        const fragmentModule = webgpu.device.createShaderModule({ code: webgpu.fragmentShader });
-        this.pipeline = webgpu.device.createRenderPipeline({
-            layout: webgpu.device.createPipelineLayout({ bindGroupLayouts: [webgpu.bindGroupLayout, webgpu.vertexBGL] }),
-            vertex: { module: vertexModule, entryPoint: "main" },
-            fragment: {
-                module: fragmentModule, entryPoint: "main", targets: [{
-                    format: 'rgba8unorm',
-                    blend: {
-                        alpha: {
-                            operation: 'add',
-                            srcFactor: 'src-alpha',
-                            dstFactor: 'one-minus-src-alpha'
-                        },
-                        color: {
-                            operation: 'add',
-                            srcFactor: 'src-alpha',
-                            dstFactor: 'one-minus-src-alpha'
-                        }
-                    }
-                }]
-            },
-            primitive: { topology: "triangle-strip", cullMode: "none" },
+            this.videoElements[path] = videoElement;
         });
-
-        this.webgpu = webgpu;
-        this.activeBindGroup = null;
-        this.blocked = false;
     }
 
-    // returns a promise
+    // Start playing the video
     start(path = false) {
         if (path) {
-            this.currentVideo = this.videoElements[path].videoElement;
+            this.currentVideo = this.videoElements[path];
         } else {
-            this.currentVideo = this.videoElements[Object.keys(this.videoElements)[0]].videoElement;
+            this.currentVideo = this.videoElements[Object.keys(this.videoElements)[0]];
         }
-        this.nextVideo = this.videoElements[this.getNextVideoStrategy(this.currentVideo)].videoElement;
+        this.nextVideo = this.videoElements[this.getNextVideoStrategy(this.currentVideo)];
         this.currentVideo.onended = this.switchVideo.bind(this);
         return this.currentVideo.play();
     }
 
+    // Switch to the next video
     async switchVideo() {
         this.currentVideo = this.nextVideo;
         this.currentVideo.onended = this.switchVideo.bind(this);
-        // must await this promise:
         await this.currentVideo.play();
-        this.nextVideo = this.videoElements[this.getNextVideoStrategy(this.currentVideo)].videoElement;
-        // needed to avoid skipping the first frame of the video
+        this.nextVideo = this.videoElements[this.getNextVideoStrategy(this.currentVideo)];
         this.nextVideo.currentTime = 0;
     }
 
-    renderFrame(renderPassEncoder) {
+    // Get the current frame for rendering
+    getCurrentFrame(device) {
         if (this.currentVideo?.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-            // Create a new external texture for the current frame
-            const externalTexture = this.webgpu.device.importExternalTexture({
-                source: this.currentVideo
-            });
-            // Create a new bind group for the current frame
-            this.activeBindGroup = this.webgpu.device.createBindGroup({
-                layout: this.webgpu.bindGroupLayout,
-                entries: [
-                    { binding: 0, resource: this.webgpu.sampler },
-                    { binding: 1, resource: externalTexture },
-                    { binding: 2, resource: { buffer: this.webgpu.constants } },
-                ],
-            });
-            renderPassEncoder.setPipeline(this.pipeline);
-            renderPassEncoder.setBindGroup(0, this.activeBindGroup);
-            renderPassEncoder.setBindGroup(1, this.webgpu.vertexBindGroup);
-            renderPassEncoder.draw(4, 1, 0, 0);
+            return device.importExternalTexture({ source: this.currentVideo });
         }
+        return false;
     }
-};
+}
+
 export default VideoPlayer;

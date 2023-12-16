@@ -293,6 +293,7 @@ fn main(
 }
 `;
 
+import InteractiveVideo from './InteractiveVideo.js';
 import VideoPlayer from './VideoPlayer.js';
 
 // global variables
@@ -323,7 +324,7 @@ function setCursorSize(mode) {
         size: { width: cursorWidth, height: cursorHeight, depthOrArrayLayers: 1 },
         format: 'rgba8unorm',
         usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.SAMPLED | GPUTextureUsage.TEXTURE_BINDING
-    });    
+    });
     device.queue.writeBuffer(
         constantsBuffer,
         0,
@@ -352,8 +353,8 @@ let adapter, device, canvas, context;
 let mousePositionBuffer, constantsBuffer, vertexConstantsBuffer;
 let bindGroup, vertexBindGroup;
 let mainVideoPipeline, cursorPipeline, hitboxPipeline;  // Pipeline for rendering the video
-let videoBindGroupA, videoBindGroupB; 
-let cursorBindGroup, hitboxBindGroup; 
+let videoBindGroupA, videoBindGroupB;
+let cursorBindGroup, hitboxBindGroup;
 let currentCursor = null;
 let linearSampler = null;
 let fragmentShaderModules = {};
@@ -376,7 +377,7 @@ function setCursorActive(newValue) {
     );
 }
 
-let  activeRadius = 0.15;
+let activeRadius = 0.15;
 
 // src/trailer/src.js
 class CursorPlugin {
@@ -470,7 +471,7 @@ const defaultCursorEventHandlers = {
                 // this.cursorVideoPlayer.interuptVideo('open_hover.webm');
                 userInputQueue = ['open_hover'];
                 return;
-            } 
+            }
         }
         // when they leave the hand-hover state for 'open':
         if (window.cursorState === 'open_hover') {
@@ -495,7 +496,7 @@ const defaultCursorEventHandlers = {
     click: async event => {
         if (window.mainState === 'intro' && window.cursorState === 'look') {
             window.userInput = 'side';
-            return; 
+            return;
         }
         if (window.mainState === 'side' && window.cursorState.includes('open_hover')) {
             window.userInput = 'opened_lantern';
@@ -515,7 +516,7 @@ async function getPixelColorFromTexture(texture, x, y) {
     copyCommandEncoder.copyTextureToBuffer({
         texture: extractedPixelTexture,
         mipLevel: 0,
-        origin: {x:0, y:0, z:0}
+        origin: { x: 0, y: 0, z: 0 }
     }, {
         buffer: readBuffer,
         offset: 0,
@@ -616,7 +617,7 @@ async function initWebGPU() {
     fragmentShaderModules.cursorHitbox = device.createShaderModule({
         code: cursorHitboxShaderCode
     });
-    
+
     setCursorSize(CURSOR_MODES.LARGE);
 
     createPipeline('default');
@@ -628,7 +629,7 @@ function createPipeline(cursorType) {
             { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }
         ]
     });
-    
+
     mainBGL = device.createBindGroupLayout({
         entries: [
             { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
@@ -637,10 +638,10 @@ function createPipeline(cursorType) {
 
         ]
     });
-    
+
     mainVideoPipeline = device.createRenderPipeline({
         layout: device.createPipelineLayout({
-            bindGroupLayouts: [mainBGL, vertexBGL],            
+            bindGroupLayouts: [mainBGL, vertexBGL],
         }),
         vertex: {
             module: fragmentShaderModules.defaultVertex,
@@ -705,24 +706,24 @@ function createPipeline(cursorType) {
 // cursor pipieline needs to be updated every time there is a change in whether the mask is available or not
 function updateCursorPipeline(cursorType, maskElement) {
     if (maskElement) {
-        cursorBGL = device.createBindGroupLayout({ 
+        cursorBGL = device.createBindGroupLayout({
             entries: [
                 { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
                 { binding: 1, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
                 { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
                 { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
                 { binding: 4, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} }
-            ] 
+            ]
         });
     } else {
         cursorType = 'cursorNoMask';
-        cursorBGL = device.createBindGroupLayout({ 
+        cursorBGL = device.createBindGroupLayout({
             entries: [
                 { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
                 { binding: 1, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
                 { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
                 { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-            ] 
+            ]
         });
     }
     cursorPipeline = device.createRenderPipeline({
@@ -760,7 +761,7 @@ function updateCursorPipeline(cursorType, maskElement) {
 }
 
 async function renderFrame() {
-    
+
     let mouseX = 0;
     let mouseY = 0;
 
@@ -790,8 +791,8 @@ async function renderFrame() {
     // Create external texture and bind group if needed
 
     // Wait for the video frame to update
-    if (!window.mainVideoPlayer.blocked) {
-        window.mainVideoPlayer.renderFrame(renderPassEncoder);
+    if (!window.mainInteractiveVideo.blocked) {
+        window.mainInteractiveVideo.renderFrame(renderPassEncoder);
     }
     renderPassEncoder.end();
     device.queue.submit([commandEncoder.finish()]);
@@ -799,10 +800,8 @@ async function renderFrame() {
     // await scanHitboxPixels(commandEncoder);
 }
 
-async function renderLoop() {
-    renderLoopCount++;
-    updateFPS();
-    if (renderLoopCount % 30 === 0) {
+function updateTextAndCursor() {
+    return new Promise((resolve, reject) => {
         // console.time('dom_render');
         const textContainer = document.getElementById('textContainer');
         const latestLetterContainer = document.getElementById('latestLetterContainer');
@@ -813,47 +812,50 @@ async function renderLoop() {
             if (window.userString !== previousString) {
                 const lastChar = window.userString.charAt(window.userString.length - 1);
                 latestLetterContainer.textContent = lastChar;
-        
+
                 // Set position based on mouseXNormalized and mouseYNormalized
                 // Assuming these values are in percentage (0-100), you might need to adjust this calculation
                 // latestLetterContainer.style.left = `${mouseXNormalized * 100}%`;
                 // latestLetterContainer.style.top = `${mouseYNormalized * 100}%`;
-        
+
                 latestLetterContainer.classList.add("blur-animation");
-        
+
                 setTimeout(() => {
                     latestLetterContainer.classList.remove("blur-animation");
                 }, 500);
-        
+
                 setTimeout(() => {
                     latestLetterContainer.textContent = "";
                 }, 1000); // 500ms (effect duration) + 500ms (additional delay) = 1000ms or 1 second
-        
+
                 previousString = window.userString;
             }
-        
+
             textContainer.textContent = window.userString;
-            textContainer.style.color = 'white'; 
-        
+            textContainer.style.color = 'white';
+
             if (wordCompleted) {
                 textContainer.classList.add("flash-animation");
-        
+
                 setTimeout(() => {
                     textContainer.classList.remove("flash-animation");
                 }, 500);
                 wordCompleted = false;
             }
-        
+
         } else {
             window.userString = "";
             textContainer.textContent = "";
             latestLetterContainer.textContent = ""; // Clear the latest letter when cursor is active
         }
         // console.timeEnd('dom_render');
-    }
-    // Determine the video currently playing
-    // Main video player logic
-    // console.time('texture_copies');;
+        resolve();
+    });
+}
+async function renderLoop() {
+    renderLoopCount++;
+    updateFPS();
+    updateTextAndCursor();
     let currentMainVideo;
     const currentTime = performance.now();
     const elapsedTime = (currentTime - startTime) / 1000.0;  // Convert to seconds
@@ -866,13 +868,7 @@ async function renderLoop() {
             shudderAmount, rippleStrength, rippleFrequency, elapsedTime
         ]).buffer
     );
-
-    // update any bindgroups or videos
-    updateTextures(); 
-    // Render to the canvas using WebGPU
-    // console.time('render_frame_time');
     await renderFrame();
-    // console.timeEnd('render_frame_time');
     // Call this function continuously to keep updating
     requestAnimationFrame(renderLoop);
 }
@@ -888,7 +884,7 @@ async function scanHitboxPixels(commandEncoder) {
     computePassEncoder.dispatchWorkgroups(8, 8, 1);
     // computePassEncoder.dispatchWorkgroups(1,1,1);
     computePassEncoder.end();
-    
+
     commandEncoder.copyBufferToBuffer(
         hitboxOutputBuffer,
         0,
@@ -903,7 +899,7 @@ async function scanHitboxPixels(commandEncoder) {
         hitboxBufferSize // Length
     );
     const copyArrayBuffer = stagingBuffer.getMappedRange(0, hitboxBufferSize / 32);
-    const data = copyArrayBuffer.slice(); 
+    const data = copyArrayBuffer.slice();
     stagingBuffer.unmap();
     const pixelData = new Float32Array(data);
     if (window.mainVideoPlayer.currentHitboxList) {
@@ -938,7 +934,7 @@ function updateHitboxBindGroup() {
         { binding: 3, resource: { buffer: constantsBuffer } },
     ];
     // Check if the mask video is present and add it to the bind group
-    if (window.mainVideoPlayer.activeVideos.hitbox && 
+    if (window.mainVideoPlayer.activeVideos.hitbox &&
         window.mainVideoPlayer.activeVideos.hitbox.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
         const hitboxVideoExternalTexture = device.importExternalTexture({ source: window.mainVideoPlayer.activeVideos.hitbox });
         entries.push({ binding: 4, resource: hitboxVideoExternalTexture });
@@ -950,9 +946,9 @@ function updateHitboxBindGroup() {
     stagingBuffer = device.createBuffer({
         size: hitboxBufferSize,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
-      });
+    });
 }
-let  hitboxBufferSize;
+let hitboxBufferSize;
 let stagingBuffer;
 
 function videoNeedsUpdate(video, videoType) {
@@ -972,46 +968,35 @@ function updateCursorBindGroup(hasMaskVideo) {
         return device.createBindGroup({
             layout: cursorBGL,
             entries: [
-            { binding: 0, resource: linearSampler },
-            { binding: 1, resource: cursorExternalTexture },
-            { binding: 2, resource: { buffer: mousePositionBuffer } },
-            { binding: 3, resource: { buffer: constantsBuffer } },
-            { binding: 4, resource: maskVideoExternalTexture }, // Mask texture
+                { binding: 0, resource: linearSampler },
+                { binding: 1, resource: cursorExternalTexture },
+                { binding: 2, resource: { buffer: mousePositionBuffer } },
+                { binding: 3, resource: { buffer: constantsBuffer } },
+                { binding: 4, resource: maskVideoExternalTexture }, // Mask texture
             ]
         });
     } else {
         updateCursorPipeline('cursorNoMask', false);
         // Mask video is unavailable, use the bind group without mask texture
-      return device.createBindGroup({
-        layout: cursorBGL,
-        entries: [
-          { binding: 0, resource: linearSampler },
-          { binding: 1, resource: cursorExternalTexture },
-          { binding: 2, resource: { buffer: mousePositionBuffer } },
-          { binding: 3, resource: { buffer: constantsBuffer } },
-        ]
-      });
+        return device.createBindGroup({
+            layout: cursorBGL,
+            entries: [
+                { binding: 0, resource: linearSampler },
+                { binding: 1, resource: cursorExternalTexture },
+                { binding: 2, resource: { buffer: mousePositionBuffer } },
+                { binding: 3, resource: { buffer: constantsBuffer } },
+            ]
+        });
     }
-  }
-  
-let mainVideo = null;
-
-async function updateTextures() {
-    // if (videoNeedsUpdate(window.cursorVideoPlayer.activeVideos.main, 'cursor')) {
-        // Update the cursor bind group based on the chosen pipeline
-        //  cursorBindGroup = updateCursorBindGroup(!!window.cursorVideoPlayer.activeVideos.mask);
-    // }
-    // update hitbox video
-    // if (videoNeedsUpdate(window.mainVideoPlayer.activeVideos.hitbox, 'hitbox')) {
-    //     updateHitboxBindGroup();
-    // }
 }
+
+let mainVideo = null;
 
 let renderLoopCount = 0;
 
-window.onload = async function () {   
+window.onload = async function () {
     overlayCanvas = document.getElementById("overlayCanvas");
-    window.addEventListener('resize', function() {
+    window.addEventListener('resize', function () {
         overlayCanvas.width = window.innerWidth;
         overlayCanvas.height = window.innerHeight;
     });
@@ -1021,7 +1006,7 @@ window.onload = async function () {
     // Create the default cursor using the cursor plugin class
     const cursorPlaygraph = window.Playgraph.getPlaygraph('one').cursor;
     let isLetterAnimating = false;
-    
+
     window.addEventListener("keyup", (event) => {
         if (isLetterAnimating) return;  // If a letter is animating, ignore other keypresses
         // any key to exit a text state
@@ -1046,14 +1031,14 @@ window.onload = async function () {
             // }
             userInputQueue.push(window.userString);
             isLetterAnimating = true;  // Set the flag
-    
+
             // Reset the flag after a delay (corresponding to the duration of the animation + the half-second delay)
             setTimeout(() => {
                 isLetterAnimating = false;
             }, textFlashAnimationDuration + 500);
         }
     });
-    
+
     defaultCursor = new CursorPlugin(cursorVideoTexture, cursorFragmentShaderCode, defaultCursorEventHandlers);
     defaultCursor.setPlaygraph(cursorPlaygraph);
     // Set this default cursor as the current cursor
@@ -1145,17 +1130,12 @@ window.onload = async function () {
             fragmentShader: mainFragmentShaderCode,
             constants: constantsBuffer,
         }
-        window.mainVideoPlayer = new VideoPlayer(gpuOptions, playgraph, mainNextVideoStrategy, second, true);
+        const videoPlayer = new VideoPlayer(playgraph, mainNextVideoStrategy, false);
+        window.mainInteractiveVideo = new InteractiveVideo(gpuOptions, videoPlayer);
         renderLoop();
-        // while (firstVideo.readyState < 2) {
-        //     await new Promise(r => setTimeout(r, 100));
-        // }
-        while (window.mainVideoPlayer.blocked) {
-            await new Promise(r => setTimeout(r, 100));
-        }
-        await window.mainVideoPlayer.start('');
-        // await window.mainVideoPlayer.videoA.play();
-            
+        await new Promise(r => setTimeout(r, 200));
+        await window.mainInteractiveVideo.start('');
+
         // Preload next video
         // const secondVideoPath = window.mainVideoPlayer.getNextVideoStrategy(firstVideo);
         // console.log('preload next video', secondVideoPath);
@@ -1214,7 +1194,7 @@ function mainNextVideoStrategy(currentVideo) {
     //     return '/main/front_forward_idle.webm';
     // }
     if (window.mainState === 'side') {
-        window.mainState = 'side_reverse'; 
+        window.mainState = 'side_reverse';
         console.log('reverse')
         return '/main/side_idle_reverse.webm';
     }
@@ -1262,7 +1242,7 @@ function defaultNextVideoStrategy(currentVideo) {
     const nextVideoPath = `/main/${currentNode.edges[nextEdgeIndex].id}`;
     const nextNodeId = currentNode.edges[nextEdgeIndex].to;
     const nextNodeIndex = this.playgraph.nodes.findIndex(node => node.id === nextNodeId);
-    
+
     if (nextNodeIndex !== -1) {
         this.currentNodeIndex = nextNodeIndex;
     }
@@ -1325,7 +1305,7 @@ const stateTransitions = {
 };
 
 const autoTransitions = {
-    'open_hover': 'open_hover_idle', 
+    'open_hover': 'open_hover_idle',
     'open_hover_exit': 'open',
     'look_at_handle_enter': 'look_at_handle_idle',
     // 'look_at_handle_exit': 'look'
@@ -1333,7 +1313,7 @@ const autoTransitions = {
 
 function getNextCursorVideo(currentVideo, playgraph, userInput) {
     const nextUserInput = userInputQueue.shift() || '';
-    
+
     // Check for automatic transitions first
     const autoTransitionState = autoTransitions[window.cursorState];
     if (autoTransitionState) {
@@ -1341,7 +1321,7 @@ function getNextCursorVideo(currentVideo, playgraph, userInput) {
         window.cursorState = autoTransitionState;
         return getDefaultVideoForState(currentState) || currentVideo.src;
     }
-    
+
     if (nextUserInput === '') {
         return getDefaultVideoForState(window.cursorState) || currentVideo.src;
     }
