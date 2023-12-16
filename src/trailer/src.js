@@ -774,10 +774,10 @@ async function renderFrame() {
     const renderPassDescriptor = {
         colorAttachments: [{
             view: currentTexture.createView(),
-            clearValue: { r: 1.0, g: 0.0, b: 0.0, a: 1.0 },
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
             loadOp: 'clear',
             storeOp: 'store',
-            loadValue: 'clear',
+            loadValue: 'load',
         }],
     };
     const commandEncoder = device.createCommandEncoder();
@@ -790,7 +790,9 @@ async function renderFrame() {
     // Create external texture and bind group if needed
 
     // Wait for the video frame to update
-    window.mainVideoPlayer.renderFrame(renderPassEncoder);
+    if (!window.mainVideoPlayer.blocked) {
+        window.mainVideoPlayer.renderFrame(renderPassEncoder);
+    }
     renderPassEncoder.end();
     device.queue.submit([commandEncoder.finish()]);
 
@@ -1000,9 +1002,9 @@ async function updateTextures() {
         //  cursorBindGroup = updateCursorBindGroup(!!window.cursorVideoPlayer.activeVideos.mask);
     // }
     // update hitbox video
-    if (videoNeedsUpdate(window.mainVideoPlayer.activeVideos.hitbox, 'hitbox')) {
-        updateHitboxBindGroup();
-    }
+    // if (videoNeedsUpdate(window.mainVideoPlayer.activeVideos.hitbox, 'hitbox')) {
+    //     updateHitboxBindGroup();
+    // }
 }
 
 let renderLoopCount = 0;
@@ -1101,22 +1103,7 @@ window.onload = async function () {
     // Add listeners for various user interactions
     console.log('add listeners');
     document.addEventListener('click', async function playOnInteraction() {
-        console.log('click');
-        const gpuOptions = {
-            device,
-            context,
-            bindGroupLayout: mainBGL,
-            sampler: linearSampler,
-            vertexBGL,
-            vertexBindGroup: vertexBindGroup,
-            vertexShader: vertexShaderCode,
-            cursorBGL,
-            hitboxBGL,
-            fragmentShader: mainFragmentShaderCode,
-            constants: constantsBuffer,
-        }
-        window.mainVideoPlayer = new VideoPlayer(gpuOptions, playgraph, mainNextVideoStrategy, second, true);
-
+        document.removeEventListener('click', playOnInteraction);
         // move this to the init after the videoA starts playing then there's a texture for it to import 
         // const mainExternalTexture = device.importExternalTexture({ source: window.mainVideoPlayer.activeVideos.main });
         // // // Create bind group for rendering the video
@@ -1145,34 +1132,45 @@ window.onload = async function () {
         //     layout: cursorBGL,
         //     entries: entries
         // });
+        const gpuOptions = {
+            device,
+            context,
+            bindGroupLayout: mainBGL,
+            sampler: linearSampler,
+            vertexBGL,
+            vertexBindGroup: vertexBindGroup,
+            vertexShader: vertexShaderCode,
+            cursorBGL,
+            hitboxBGL,
+            fragmentShader: mainFragmentShaderCode,
+            constants: constantsBuffer,
+        }
+        window.mainVideoPlayer = new VideoPlayer(gpuOptions, playgraph, mainNextVideoStrategy, second, true);
         renderLoop();
-        // window.mainVideoPlayer.videoA.play();
-        console.log('rendered loop', window.mainVideoPlayer.videoA.src);
-        // wait until it's ready to play:
-        while (window.mainVideoPlayer.videoA.readyState < 2) {
-            console.log('waiting for ready state');
-            await new Promise(resolve => setTimeout(resolve, 500));
+        // while (firstVideo.readyState < 2) {
+        //     await new Promise(r => setTimeout(r, 100));
+        // }
+        while (window.mainVideoPlayer.blocked) {
+            await new Promise(r => setTimeout(r, 100));
         }
-        if (window.mainVideoPlayer.videoA.readyState > 3) {
-            console.log('here');
-            window.mainVideoPlayer.videoA.play();
-            // window.mainVideoPlayer.videoA.activateTexture();
+        await window.mainVideoPlayer.start('');
+        // await window.mainVideoPlayer.videoA.play();
             
-            // Preload next video
-            const nextVideoPath = window.mainVideoPlayer.getNextVideoStrategy(window.mainVideoPlayer.videoA);
-            window.mainVideoPlayer.videoB.src = nextVideoPath;
-
-            // Check if mask is required and preload mask video
-            const currentNode = playgraph.nodes.find(node => node.id === window.mainVideoPlayer.videoA.src.split("/main/")[1]);
-            if (currentNode && currentNode.mask) {
-                const nextMaskVideoPath = nextVideoPath.replace('.webm', '_mask.webm');
-                window.mainVideoPlayer.maskVideoB.src = nextMaskVideoPath;
-            }
-            // Remove this listener since the video has started
-            if (++bothVideosLoaded === 2) {
-                document.removeEventListener('click', playOnInteraction);
-            }
-        }
+        // Preload next video
+        // const secondVideoPath = window.mainVideoPlayer.getNextVideoStrategy(firstVideo);
+        // console.log('preload next video', secondVideoPath);
+        // firstVideo.onended = () => {
+        //     window.mainVideoPlayer.switchVideos(firstVideo, secondVideoPath);
+        //     // // Check if mask is required and preload mask video
+        //     // const currentNode = playgraph.nodes.find(node => node.id === window.mainVideoPlayer.videoA.src.split("/main/")[1]);
+        //     // if (currentNode && currentNode.mask) {
+        //     //     const nextMaskVideoPath = nextVideoPath.replace('.webm', '_mask.webm');
+        //     //     window.mainVideoPlayer.maskVideoB.src = nextMaskVideoPath;
+        //     // }
+        //     // // Remove this listener since the video has started
+        //     // if (++bothVideosLoaded === 2) {
+        //     // }
+        // }
         // if (window.cursorVideoPlayer.videoA.readyState > 3) {
         //     window.cursorVideoPlayer.videoA.play();
         //     // Preload next video
@@ -1208,21 +1206,33 @@ function defaultCursorNextVideoStrategy(currentVideo) {
 }
 
 function mainNextVideoStrategy(currentVideo) {
-    if (window.mainState === 'intro') {
-        if (window.userInput === "side") {
-            window.mainState = 'side';
-            return '/main/side.webm';
-        }
-        return '/main/front_forward_idle.webm';
-    }
+    // if (window.mainState === 'intro') {
+    //     if (window.userInput === "side") {
+    //         window.mainState = 'side';
+    //         return '/main/side.webm';
+    //     }
+    //     return '/main/front_forward_idle.webm';
+    // }
     if (window.mainState === 'side') {
-        if (window.userInput === 'opened_lantern') {
-            window.mainState = 'opened_lantern';
-            return '/main/opened_lantern.webm';
-        }
-        this.currentNodeIndex = this.playgraph.nodes.findIndex(node => node.id === 'side_idle');
-        return '/main/side_idle.webm';
+        window.mainState = 'side_reverse'; 
+        console.log('reverse')
+        return '/main/side_idle_reverse.webm';
     }
+    console.log('forward');
+    window.mainState = 'side';
+    return '/main/side_idle.webm';
+    // if (window.mainState === 'side') {
+    //     if (window.userInput === 'opened_lantern') {
+    //         window.mainState = 'opened_lantern';
+    //         return '/main/opened_lantern.webm';
+    //     }
+    //     if (this.currentNodeIndex === this.playgraph.nodes.findIndex(node => node.id === 'side_idle')) {
+    //         this.currentNodeIndex = this.playgraph.nodes.findIndex(node => node.id === 'side_idle_reverse'); 
+    //         return '/main/side_idle_reverse.webm';
+    //     } 
+    //     this.currentNodeIndex = this.playgraph.nodes.findIndex(node => node.id === 'side_idle'); 
+    //     return '/main/side_idle.webm';
+    // }
     if (window.mainState === 'opened_lantern') {
         this.currentNodeIndex = this.playgraph.nodes.findIndex(node => node.id === 'opened_lantern_idle');
         return '/main/opened_lantern_idle.webm';
