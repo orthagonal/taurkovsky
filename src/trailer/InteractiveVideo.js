@@ -5,9 +5,10 @@ interactive video class handles the webgpu rendering of the video:
 */
 
 class InteractiveVideo {
-  constructor(webgpu, videoPlayer) {
+  constructor(webgpu, videoPlayers, renderBindGroup) {
     this.webgpu = webgpu;
-    this.videoPlayer = videoPlayer;
+    this.videoPlayers = Array.isArray(videoPlayers) ? videoPlayers : [videoPlayers];
+    this.renderBindGroup = renderBindGroup.bind(this);
     this.activeBindGroup = null;
 
     // Create pipeline
@@ -39,26 +40,26 @@ class InteractiveVideo {
 
   // returns the 'play' promise from html5 video element
   start(path = false) {
-    // Start the video player
-    return this.videoPlayer.start(false);
+    return Promise.all(this.videoPlayers.map(videoPlayer => videoPlayer.start(path)));
   }
 
   // Render a frame using WebGPU
   renderFrame(renderPassEncoder) {
-    const externalTexture = this.videoPlayer.getCurrentFrame(this.webgpu.device);
-    if (externalTexture) {
-      this.activeBindGroup = this.webgpu.device.createBindGroup({
-        layout: this.webgpu.bindGroupLayout,
-        entries: [
-          { binding: 0, resource: this.webgpu.sampler },
-          { binding: 1, resource: externalTexture },
-          { binding: 2, resource: { buffer: this.webgpu.constants } },
-        ],
-      });
-      renderPassEncoder.setPipeline(this.pipeline);
-      renderPassEncoder.setBindGroup(0, this.activeBindGroup);
-      renderPassEncoder.setBindGroup(1, this.webgpu.vertexBindGroup);
-      renderPassEncoder.draw(4, 1, 0, 0);
+    let textures = [];
+
+    // Attempt to get a texture from each video player
+    for (let videoPlayer of this.videoPlayers) {
+      let texture = videoPlayer.getCurrentFrame(this.webgpu.device);
+      if (!texture) {
+        // If any texture is not available, do not render this frame
+        return;
+      }
+      textures.push(texture);
+    }
+
+    // If all textures are available, call the custom renderBindGroup function
+    if (textures.length === this.videoPlayers.length) {
+      this.renderBindGroup(textures, renderPassEncoder);
     }
   }
 }

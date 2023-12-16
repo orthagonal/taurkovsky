@@ -4,15 +4,13 @@ target = "./public/player.html"
 [watch]
 watch = [
   "./src/trailer/src.js",
+  "./src/trailer/InteractiveVideo.js",
   "./src/trailer/VideoPlayer.js",
   "./src/trailer/playgraph.js",
   "./src/trailer/player.html",
-  "./src/trailer/main"
+  "./src/trailer/main",
 ]
-ignore = [
-  "./src-tauri",
-  "./public"
-]
+ignore = ["./src-tauri", "./public"]
 
 [serve]
 address = "127.0.0.1"

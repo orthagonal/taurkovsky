@@ -1131,7 +1131,24 @@ window.onload = async function () {
             constants: constantsBuffer,
         }
         const videoPlayer = new VideoPlayer(playgraph, mainNextVideoStrategy, false);
-        window.mainInteractiveVideo = new InteractiveVideo(gpuOptions, videoPlayer);
+        const renderMainBindGroup = function (textureList, renderPassEncoder) {
+            const webgpu = this.webgpu;
+            // Render the main video
+            const mainExternalTexture = textureList[0];
+            const bindGroup = webgpu.device.createBindGroup({
+                layout: mainBGL,
+                entries: [
+                    { binding: 0, resource: webgpu.sampler },
+                    { binding: 1, resource: mainExternalTexture },
+                    { binding: 2, resource: { buffer: webgpu.constants } },
+                ]
+            } );
+            renderPassEncoder.setPipeline(this.pipeline);
+            renderPassEncoder.setBindGroup(0, bindGroup);
+            renderPassEncoder.setBindGroup(1, this.webgpu.vertexBindGroup);
+            renderPassEncoder.draw(4, 1, 0, 0);
+        }
+        window.mainInteractiveVideo = new InteractiveVideo(gpuOptions, videoPlayer, renderMainBindGroup);
         renderLoop();
         await new Promise(r => setTimeout(r, 200));
         await window.mainInteractiveVideo.start('');
