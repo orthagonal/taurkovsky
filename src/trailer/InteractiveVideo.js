@@ -1,41 +1,18 @@
 
 /*
 interactive video class handles the webgpu rendering of the video:
-  - you configure it by passing it webgpu options and a video player
+  - you configure it by passing it webgpu options
+
 */
 
 class InteractiveVideo {
-  constructor(webgpu, videoPlayers, renderBindGroup) {
+  constructor(webgpu, videoPlayers, initialShaderBehavior) {
     this.webgpu = webgpu;
     this.videoPlayers = Array.isArray(videoPlayers) ? videoPlayers : [videoPlayers];
-    this.renderBindGroup = renderBindGroup.bind(this);
-    this.activeBindGroup = null;
-
-    // Create pipeline
-    const vertexModule = this.webgpu.device.createShaderModule({ code: this.webgpu.vertexShader });
-    const fragmentModule = this.webgpu.device.createShaderModule({ code: this.webgpu.fragmentShader });
-    this.pipeline = webgpu.device.createRenderPipeline({
-      layout: webgpu.device.createPipelineLayout({ bindGroupLayouts: [webgpu.bindGroupLayout, webgpu.vertexBGL] }),
-      vertex: { module: vertexModule, entryPoint: "main" },
-      fragment: {
-        module: fragmentModule, entryPoint: "main", targets: [{
-          format: 'rgba8unorm',
-          blend: {
-            alpha: {
-              operation: 'add',
-              srcFactor: 'src-alpha',
-              dstFactor: 'one-minus-src-alpha'
-            },
-            color: {
-              operation: 'add',
-              srcFactor: 'src-alpha',
-              dstFactor: 'one-minus-src-alpha'
-            }
-          }
-        }]
-      },
-      primitive: { topology: "triangle-strip", cullMode: "none" },
-    });
+    // set up initial shader behavior
+    this.shaderBehavior = initialShaderBehavior;
+    this.pipeline = this.shaderBehavior.getPipeline(webgpu);
+    this.bindGroupLayout = this.shaderBehavior.getBindGroupLayout(webgpu);
   }
 
   // returns the 'play' promise from html5 video element
@@ -45,22 +22,27 @@ class InteractiveVideo {
 
   // Render a frame using WebGPU
   renderFrame(renderPassEncoder) {
-    let textures = [];
-
-    // Attempt to get a texture from each video player
-    for (let videoPlayer of this.videoPlayers) {
-      let texture = videoPlayer.getCurrentFrame(this.webgpu.device);
-      if (!texture) {
-        // If any texture is not available, do not render this frame
-        return;
-      }
-      textures.push(texture);
+    const textures = this.shaderBehavior.getVideoTextures(this.webgpu.device);
+    if (!textures.every(texture => texture)) {
+      // If any texture is not ready, skip rendering this frame
+      return;
     }
 
-    // If all textures are available, call the custom renderBindGroup function
-    if (textures.length === this.videoPlayers.length) {
-      this.renderBindGroup(textures, renderPassEncoder);
-    }
+    // Set the pipeline and bind group layout for the current shader behavior
+    this.shaderBehavior.getPipeline(this.webgpu);
+    this.shaderBehavior.getBindGroupLayout(this.webgpu);
+    console.log('rendering frame');
+    this.shaderBehavior.renderBindGroup(textures, renderPassEncoder, this.webgpu);
+    // renderPassEncoder.setPipeline(this.pipeline);
+    // const bindGroup = this.webgpu.device.createBindGroup({
+    //   layout: this.bindGroupLayout,
+    //   entries: [
+    //     { binding: 0, resource: this.webgpu.sampler },
+    //     // ... other bindings based on textures ...
+    //   ],
+    // });
+    // renderPassEncoder.setBindGroup(0, bindGroup);
+    // renderPassEncoder.draw(4, 1, 0, 0);
   }
 }
 

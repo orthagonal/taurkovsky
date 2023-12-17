@@ -295,6 +295,7 @@ fn main(
 
 import InteractiveVideo from './InteractiveVideo.js';
 import VideoPlayer from './VideoPlayer.js';
+import { ShaderBehavior, DefaultShaderBehavior } from './ShaderBehavior.js';
 
 // global variables
 const screenWidth = 1920.0;
@@ -352,7 +353,7 @@ let hitboxOutputBuffer; // the gpu writes the hitbox data to this buffer
 let adapter, device, canvas, context;
 let mousePositionBuffer, constantsBuffer, vertexConstantsBuffer;
 let bindGroup, vertexBindGroup;
-let mainVideoPipeline, cursorPipeline, hitboxPipeline;  // Pipeline for rendering the video
+let cursorPipeline, hitboxPipeline;  // Pipeline for rendering the video
 let videoBindGroupA, videoBindGroupB;
 let cursorBindGroup, hitboxBindGroup;
 let currentCursor = null;
@@ -639,39 +640,6 @@ function createPipeline(cursorType) {
         ]
     });
 
-    mainVideoPipeline = device.createRenderPipeline({
-        layout: device.createPipelineLayout({
-            bindGroupLayouts: [mainBGL, vertexBGL],
-        }),
-        vertex: {
-            module: fragmentShaderModules.defaultVertex,
-            entryPoint: 'main'
-        },
-        fragment: {
-            module: fragmentShaderModules.main,
-            entryPoint: 'main',
-            targets: [{
-                format: 'rgba8unorm',
-                blend: {
-                    alpha: {
-                        operation: 'add',
-                        srcFactor: 'src-alpha',
-                        dstFactor: 'one-minus-src-alpha'
-                    },
-                    color: {
-                        operation: 'add',
-                        srcFactor: 'src-alpha',
-                        dstFactor: 'one-minus-src-alpha'
-                    }
-                }
-            }]
-        },
-        primitive: {
-            topology: 'triangle-strip',
-            stripIndexFormat: 'uint32'
-        },
-    });
-
     // this needs to be updated every time there is a change in whether the mask is available or not
     // the non-mask version takes 4 bindgroups, the mask version takes 5
     // not sure how to coordinate all of
@@ -784,12 +752,6 @@ async function renderFrame() {
     const commandEncoder = device.createCommandEncoder();
     const renderPassEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
 
-    // const activeVideo = window.mainVideoPlayer.videoA.readyState >= 2 ? window.mainVideoPlayer.videoA 
-    //     : window.mainVideoPlayer.videoB.readyState >= 2 ? window.mainVideoPlayer.videoB 
-    //     : false;
-    //window.mainVideoPlayer.activeVideos.main;
-    // Create external texture and bind group if needed
-
     // Wait for the video frame to update
     if (!window.mainInteractiveVideo.blocked) {
         window.mainInteractiveVideo.renderFrame(renderPassEncoder);
@@ -856,10 +818,8 @@ async function renderLoop() {
     renderLoopCount++;
     updateFPS();
     updateTextAndCursor();
-    let currentMainVideo;
     const currentTime = performance.now();
     const elapsedTime = (currentTime - startTime) / 1000.0;  // Convert to seconds
-    // console.timeEnd('texture_copies');
     // Update the uniform buffer with the new time value
     device.queue.writeBuffer(
         vertexConstantsBuffer,
@@ -926,7 +886,6 @@ function updateHitboxBindGroup() {
         size: hitboxBufferSize,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
     });
-
     let entries = [
         { binding: 0, resource: { buffer: hitboxOutputBuffer, type: 'storage' } },
         { binding: 1, resource: linearSampler },
@@ -957,37 +916,6 @@ function videoNeedsUpdate(video, videoType) {
         return true;
     }
     return false;
-}
-
-function updateCursorBindGroup(hasMaskVideo) {
-    const cursorExternalTexture = device.importExternalTexture({ source: window.cursorVideoPlayer.activeVideos.main });
-    if (hasMaskVideo && videoNeedsUpdate(window.cursorVideoPlayer.activeVideos.mask, 'mask')) {
-        updateCursorPipeline('cursor1', true);
-        const maskVideoExternalTexture = device.importExternalTexture({ source: window.cursorVideoPlayer.activeVideos.mask });
-        // Mask video is available, use the bind group with mask texture
-        return device.createBindGroup({
-            layout: cursorBGL,
-            entries: [
-                { binding: 0, resource: linearSampler },
-                { binding: 1, resource: cursorExternalTexture },
-                { binding: 2, resource: { buffer: mousePositionBuffer } },
-                { binding: 3, resource: { buffer: constantsBuffer } },
-                { binding: 4, resource: maskVideoExternalTexture }, // Mask texture
-            ]
-        });
-    } else {
-        updateCursorPipeline('cursorNoMask', false);
-        // Mask video is unavailable, use the bind group without mask texture
-        return device.createBindGroup({
-            layout: cursorBGL,
-            entries: [
-                { binding: 0, resource: linearSampler },
-                { binding: 1, resource: cursorExternalTexture },
-                { binding: 2, resource: { buffer: mousePositionBuffer } },
-                { binding: 3, resource: { buffer: constantsBuffer } },
-            ]
-        });
-    }
 }
 
 let mainVideo = null;
@@ -1057,32 +985,6 @@ window.onload = async function () {
     const playgraph = window.Playgraph.getPlaygraph('one').main;
     const second = window.Playgraph.getPlaygraph('one').main.nodes.find(node => node.id === "intro");
 
-    // window.mainVideoPlayer.videoA.onplay = () => {
-    //     console.log('init vid a');
-    //     mainExternalTextureA = device.importExternalTexture({ source: window.mainVideoPlayer.videoA });
-    //     window.mainVideoPlayer.videoA.bindGroup = device.createBindGroup({
-    //         layout: mainBGL,
-    //         entries: [
-    //             { binding: 0, resource: linearSampler },
-    //             { binding: 1, resource: mainExternalTextureA },
-    //             { binding: 2, resource: { buffer: constantsBuffer } },
-    //         ]
-    //     });
-    //     window.mainVideoPlayer.videoA.onplay = null;
-    // }
-    // window.mainVideoPlayer.videoB.onplay = () => {
-    //     console.log('onplay vid b!');
-    //     mainExternalTextureB = device.importExternalTexture({ source: window.mainVideoPlayer.videoB });
-    //     window.mainVideoPlayer.videoB.bindGroup = device.createBindGroup({
-    //         layout: mainBGL,
-    //         entries: [
-    //             { binding: 0, resource: linearSampler },
-    //             { binding: 1, resource: mainExternalTextureB },
-    //             { binding: 2, resource: { buffer: constantsBuffer } },
-    //         ]
-    //     });
-    //     window.mainVideoPlayer.videoB.onplay = null;
-    // }
     // Create the sampler and bind group for rendering the video
     let bothVideosLoaded = 0;
     // Add listeners for various user interactions
@@ -1091,22 +993,6 @@ window.onload = async function () {
         document.removeEventListener('click', playOnInteraction);
         // move this to the init after the videoA starts playing then there's a texture for it to import 
         // const mainExternalTexture = device.importExternalTexture({ source: window.mainVideoPlayer.activeVideos.main });
-        // // // Create bind group for rendering the video
-        // videoBindGroupA = device.createBindGroup({
-        //     layout: mainBGL,
-        //     entries: [
-        //         { binding: 0, resource: linearSampler },
-        //         { binding: 1, resource: mainExternalTexture },
-        //         { binding: 2, resource: { buffer: constantsBuffer } },
-        //     ]
-        // });
-        // const cursorExternalTexture = device.importExternalTexture({ source: window.cursorVideoPlayer.activeVideos.main }); 
-        // let entries = [
-        //     { binding: 0, resource: linearSampler },
-        //     { binding: 1, resource: cursorExternalTexture },
-        //     { binding: 2, resource: { buffer: mousePositionBuffer } },
-        //     { binding: 3, resource: { buffer: constantsBuffer } }
-        // ];
         // // Check if the mask video is present and add it to the bind group
         // if (window.mainVideoPlayer.activeVideos.mask && 
         //     window.mainVideoPlayer.activeVideos.mask.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
@@ -1131,52 +1017,30 @@ window.onload = async function () {
             constants: constantsBuffer,
         }
         const videoPlayer = new VideoPlayer(playgraph, mainNextVideoStrategy, false);
-        const renderMainBindGroup = function (textureList, renderPassEncoder) {
-            const webgpu = this.webgpu;
-            // Render the main video
-            const mainExternalTexture = textureList[0];
-            const bindGroup = webgpu.device.createBindGroup({
-                layout: mainBGL,
-                entries: [
-                    { binding: 0, resource: webgpu.sampler },
-                    { binding: 1, resource: mainExternalTexture },
-                    { binding: 2, resource: { buffer: webgpu.constants } },
-                ]
-            } );
-            renderPassEncoder.setPipeline(this.pipeline);
-            renderPassEncoder.setBindGroup(0, bindGroup);
-            renderPassEncoder.setBindGroup(1, this.webgpu.vertexBindGroup);
-            renderPassEncoder.draw(4, 1, 0, 0);
-        }
-        window.mainInteractiveVideo = new InteractiveVideo(gpuOptions, videoPlayer, renderMainBindGroup);
+        const mainBehavior = new DefaultShaderBehavior([videoPlayer]);
+        window.mainInteractiveVideo = new InteractiveVideo(gpuOptions, videoPlayer, mainBehavior);
+        // const renderCursorBindGroup = function (textureList, renderPassEncoder) {
+        //     const webgpu = this.webgpu;
+        //     const cursorExternalTexture = textureList[0];
+        //     const bindGroup = webgpu.device.createBindGroup({
+        //         layout: cursorBGL,
+        //         entries: [
+        //             { binding: 0, resource: linearSampler },
+        //             { binding: 1, resource: cursorExternalTexture },
+        //             { binding: 2, resource: { buffer: mousePositionBuffer } },
+        //             { binding: 3, resource: { buffer: constantsBuffer } }
+        //         ]
+        //     });
+        //     renderPassEncoder.setPipeline(this.pipeline);
+        //     renderPassEncoder.setBindGroup(0, bindGroup);
+        //     renderPassEncoder.setBindGroup(1, this.webgpu.vertexBindGroup);
+        //     renderPassEncoder.draw(4, 1, 0, 0);
+        // };
+        // window.cursorInteractiveVideo = new InteractiveVideo(gpuOptions, cursorVideoPlayers, renderCursorBindGroup);
+
         renderLoop();
         await new Promise(r => setTimeout(r, 200));
         await window.mainInteractiveVideo.start('');
-
-        // Preload next video
-        // const secondVideoPath = window.mainVideoPlayer.getNextVideoStrategy(firstVideo);
-        // console.log('preload next video', secondVideoPath);
-        // firstVideo.onended = () => {
-        //     window.mainVideoPlayer.switchVideos(firstVideo, secondVideoPath);
-        //     // // Check if mask is required and preload mask video
-        //     // const currentNode = playgraph.nodes.find(node => node.id === window.mainVideoPlayer.videoA.src.split("/main/")[1]);
-        //     // if (currentNode && currentNode.mask) {
-        //     //     const nextMaskVideoPath = nextVideoPath.replace('.webm', '_mask.webm');
-        //     //     window.mainVideoPlayer.maskVideoB.src = nextMaskVideoPath;
-        //     // }
-        //     // // Remove this listener since the video has started
-        //     // if (++bothVideosLoaded === 2) {
-        //     // }
-        // }
-        // if (window.cursorVideoPlayer.videoA.readyState > 3) {
-        //     window.cursorVideoPlayer.videoA.play();
-        //     // Preload next video
-        //     const nextVideoPath = window.cursorVideoPlayer.getNextVideoStrategy(window.cursorVideoPlayer.videoA);
-        //     window.cursorVideoPlayer.videoB.src = nextVideoPath;
-        //     if (++bothVideosLoaded === 2) {
-        //         document.removeEventListener('click', playOnInteraction);
-        //     }
-        // }
     });
 };
 

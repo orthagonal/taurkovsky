@@ -6,6 +6,7 @@ watch = [
   "./src/trailer/src.js",
   "./src/trailer/InteractiveVideo.js",
   "./src/trailer/VideoPlayer.js",
+  "./src/trailer/ShaderBehaviorr.js",
   "./src/trailer/playgraph.js",
   "./src/trailer/player.html",
   "./src/trailer/main",
