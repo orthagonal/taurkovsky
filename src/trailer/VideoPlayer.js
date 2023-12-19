@@ -1,6 +1,4 @@
 
-
-
 /*
     manages continuity and switching solely for the HTML5 video elements:
     - no rendering or graphics logic exists in this class 
@@ -22,12 +20,13 @@ class VideoPlayer {
         videoPaths.forEach(path => {
             this.createVideoElement(path);
             // If the video is an idle video, create a second element for double buffering
-            // if you just keep looping a video, it will have a gap when it loops
+            // if you just keep looping a video, it will have a gap when it loops, this creates 
+            // the illusion of a continuous loop by double buffering the video
             if (path.endsWith('_idle.webm')) {
                 this.createVideoElement(path, true);
             }
         });
-        console.log(this.videoElements);
+        console.log('all video elements loaded: ', this.videoElements);
     }
 
     createVideoElement(path, isDoubleBuffered = false) {
@@ -52,7 +51,7 @@ class VideoPlayer {
         this.videoElements[videoKey] = videoElement;
     }
 
-    // Start playing the video
+    // Start playing the video, should only need to call it once
     start(path = false) {
         if (path) {
             this.currentVideo = this.videoElements[path];
@@ -66,13 +65,22 @@ class VideoPlayer {
         return this.currentVideo.play();
     }
 
+    // Get the video element for a given path
     lookupVideo(path, isDoubleBuffered = false) {
         path = path.startsWith('/') ? path : `/${path}`
         if (isDoubleBuffered) {
             console.log('looking up double-buffered video', `${path.replace('_idle.webm', '_idle_double_buffered.webm')}`);
             return this.videoElements[`${path.replace('_idle.webm', '_idle_double_buffered.webm')}`];
         }
-        return this.videoElements[path];
+        return this.videoElements[path] || alert('VideoPlayer: no video element found for ' + path);
+    }
+
+    // sets up this.nextVideo for when this.currentVideo ends
+    // takes into account double-buffering for idle videos
+    assignNextVideo(nextVideoPath) {
+        const isIdleVideo = nextVideoPath.endsWith('_idle.webm');
+        this.playingDoubleBuffered = isIdleVideo && !this.playingDoubleBuffered;
+        this.nextVideo = this.lookupVideo(nextVideoPath, this.playingDoubleBuffered);
     }
 
     async switchVideo() {
@@ -82,38 +90,6 @@ class VideoPlayer {
         const nextVideoPath = this.getNextVideoStrategy(this.currentVideo);
         this.assignNextVideo(nextVideoPath);
         this.nextVideo.currentTime = 0;
-    }
-
-    assignNextVideo(nextVideoPath) {
-        console.log('assign next for', nextVideoPath);
-        const isIdleVideo = nextVideoPath.endsWith('_idle.webm');
-        console.log('is idle video', isIdleVideo);
-        if (isIdleVideo) {
-            if (this.playingDoubleBuffered) {
-                console.log('switching to non-double-buffered fir', nextVideoPath);
-                this.playingDoubleBuffered = false;
-                this.nextVideo = this.lookupVideo(nextVideoPath);
-                console.log(this.nextVideo?.src);
-            } else {
-                console.log('switching to double-buffered');
-                this.playingDoubleBuffered = true;
-                this.nextVideo = this.lookupVideo(nextVideoPath, true);
-                console.log(this.nextVideo?.src);
-            }
-        } else {
-            console.log('no idle video, just switch');
-            this.nextVideo = this.lookupVideo(nextVideoPath);
-            console.log(this.nextVideo?.src);
-        }
-    }
-
-    async swithcOld() {
-
-        // this.currentVideo = this.nextVideo;
-        // this.currentVideo.onended = this.switchVideo.bind(this);
-        // await this.currentVideo.play();
-        // this.nextVideo = this.videoElements[this.getNextVideoStrategy(this.currentVideo)];
-        // this.nextVideo.currentTime = 0;
     }
 
     // Get the current frame for rendering

@@ -552,7 +552,6 @@ window.onload = async function () {
         } else if (/^[a-zA-Z]$/.test(event.key)) {
             // For other input conditions
             window.userString += event.key.toLowerCase();
-            console.log('set to ', window.userString);
             // differentiate between 'l' for look vs 'l' for light
             if (window.mainState === 'side') {
                 if (window.userString === 'l') {
@@ -596,16 +595,53 @@ window.onload = async function () {
             vertexConstants: vertexConstantsBuffer,
             mousePositionBuffer
         }
-        const cursorPlaygraph = window.Playgraph.getPlaygraph('one').cursor;
-        window.spellCursor = new SpellCursor(cursorPlaygraph, getNextCursorVideo, cursorGpuOptions, defaultCursorEventHandlers);
+        // const cursorPlaygraph = window.Playgraph.getPlaygraph('one').cursor;
+        const cursorVocabulary = {
+            'blank': {
+                'blank': { entry: '/main/blank.webm', idle: '/main/blank.webm', next: 'blank' },
+            },
+            'open': {
+                'o': { entry: '/main/o2.webm', idle: '/main/o2_idle.webm', next: 'op' },
+                'op': { entry: '/main/op4.webm', idle: '/main/op_idle.webm', next: 'ope' },
+                'ope': { entry: '/main/ope4.webm', idle: '/main/ope5_idle.webm', next: 'open' },
+                'open': { entry: '/main/open_4.webm', idle: '/main/open_idle.webm', next: 'open' },
+            }
+        };
+        window.spellCursor = new SpellCursor(cursorVocabulary, getNextCursorVideo, cursorGpuOptions, defaultCursorEventHandlers, cursorVocabulary);
         // Create the default cursor using the cursor plugin class
         window.spellCursor.currentNodeIndex = 0;
         renderLoop();
         await new Promise(r => setTimeout(r, 200));
         await window.mainInteractiveVideo.start('');
-        await window.spellCursor.start();
+        await window.spellCursor.start('/main/blank.webm');
     });
 };
+
+
+function getNextCursorVideo(currentVideo, playgraph, userInput) {
+    const nextUserInput = userInputQueue.shift() || '';
+    // if we're just staying in blank mode
+    if (this.cursorState === 'blank' && nextUserInput === '') {
+        return '/main/blank.webm';
+    }
+    const vocabularyWord = this.findVocabularyWord(this.cursorState);
+    const vocabulary = this.cursorVocabulary[vocabularyWord];
+    let nextFragment = vocabulary[this.cursorState];
+    console.log('next fragment', nextFragment);
+    if (!nextFragment) {
+        console.log('error no next fragment for ', this.cursorState);
+        return '/main/blank.webm';
+    }
+    const nextState = nextUserInput !== '' ? nextUserInput : this.cursorState;
+    if (nextState === this.cursorState) {
+        return nextFragment.idle;
+    }
+    if (nextState !== this.cursorState) {
+        this.cursorState = nextState;
+        return vocabulary[nextFragment.next].entry;
+    }
+    return '/main/blank.webm';
+}
 
 function mainNextVideoStrategy(currentVideo) {
     // if (window.mainState === 'intro') {
@@ -634,21 +670,6 @@ function mainNextVideoStrategy(currentVideo) {
         return '/main/opened_lantern_idle.webm';
 
     }
-}
-
-
-function getNextCursorVideo(currentVideo, playgraph, userInput) {
-    const nextUserInput = userInputQueue.shift() || '';
-    if (this.cursorState === 'blank') {
-        if (nextUserInput === 'o') {
-            this.cursorState = 'o';
-            return '/main/o.webm';
-        }
-    }
-    if (this.cursorState === 'o' || this.cursorState === 'o_idle') {
-        return '/main/o_idle.webm';
-    }
-    return '/main/blank.webm';
 }
 
 function defaultNextVideoStrategy(currentVideo) {

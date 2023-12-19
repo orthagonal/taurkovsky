@@ -1,20 +1,26 @@
 import { CursorMaskShaderBehavior, CursorNoMaskShaderBehavior } from './SpellCursorBehaviors.js';
 import InteractiveVideo from './InteractiveVideo.js';
 import VideoPlayer from './VideoPlayer.js';
-import { extractWebmPaths } from './utilities.js';
+
+function extractWebmPathsFromVocabulary(cursorVocabulary) {
+  let webmPaths = new Set(); // Using a Set to avoid duplicates
+
+  for (const wordFragments of Object.values(cursorVocabulary)) {
+    for (const fragment of Object.values(wordFragments)) {
+      webmPaths.add(fragment.entry);
+      webmPaths.add(fragment.idle);
+    }
+  }
+
+  return Array.from(webmPaths); // Convert the set back to an array
+}
 
 class SpellCursor {
-  constructor(playgraph, nextVideoFunction, webgpuOptions, eventHandlers) {
-    this.playgraph = playgraph;
-
+  constructor(cursorVocabulary, nextVideoFunction, webgpuOptions, eventHandlers) {
+    this.cursorVocabulary = cursorVocabulary;
     // Initialize video players
-    const videoList = extractWebmPaths(playgraph);
-    videoList.push('/main/o.webm');
-    videoList.push('/main/o_idle.webm');
-    videoList.push('/main/o_idle_reverse.webm');
-    videoList.push('/main/op.webm');
-    videoList.push('/main/op_idle.webm');
-    videoList.push('/main/l.webm');
+    const videoList = extractWebmPathsFromVocabulary(cursorVocabulary);
+    videoList.push('/main/blank.webm');
     console.log('cursor starting with videoList', videoList);
     this.cursorVideoPlayer = new VideoPlayer(videoList, nextVideoFunction.bind(this));
     // this.maskVideoPlayer = new VideoPlayer(playgraph, nextVideoFunction.bind(this));
@@ -34,8 +40,19 @@ class SpellCursor {
       window.addEventListener(event, boundHandler);
     }
     // the main way we control the cursor is via it's state
-    this.cursorPlaygraph = playgraph;
     this.cursorState = 'blank';
+  }
+
+  findVocabularyWord(fragment) {
+    for (const [word, fragments] of Object.entries(this.cursorVocabulary)) {
+      if (fragments.hasOwnProperty(fragment)) {
+        return word;
+      }
+    }
+    if (fragment === 'blank') {
+      return 'blank';
+    }
+    return null; // or handle this case as appropriate
   }
 
   switchToMaskCursor() {
@@ -50,8 +67,8 @@ class SpellCursor {
     this.interactiveVideo.setShaderBehavior(this.currentBehavior);
   }
 
-  async start() {
-    await this.cursorVideoPlayer.start();
+  async start(path) {
+    await this.cursorVideoPlayer.start(path);
   }
 
   renderFrame(renderPassEncoder) {
