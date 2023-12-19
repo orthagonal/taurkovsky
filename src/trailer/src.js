@@ -144,7 +144,6 @@ function updateFPS() {
     }
 }
 
-
 function setCursorActive(newValue) {
     cursorActive = newValue;
     device.queue.writeBuffer(
@@ -554,9 +553,9 @@ window.onload = async function () {
             window.userString += event.key.toLowerCase();
             // differentiate between 'l' for look vs 'l' for light
             if (window.mainState === 'side') {
-                if (window.userString === 'l') {
-                    window.userString = 'light_l';
-                }
+                // if (window.userString === 'l') {
+                //     window.userString = 'light_l';
+                // }
             }
             userInputQueue.push(window.userString);
             isLetterAnimating = true;  // Set the flag
@@ -605,6 +604,12 @@ window.onload = async function () {
                 'op': { entry: '/main/op4.webm', idle: '/main/op_idle.webm', next: 'ope' },
                 'ope': { entry: '/main/ope4.webm', idle: '/main/ope5_idle.webm', next: 'open' },
                 'open': { entry: '/main/open_4.webm', idle: '/main/open_idle.webm', next: 'open' },
+            },
+            'look': {
+                'l': { entry: '/main/3l.webm', idle: '/main/stretch2_3l_idle.webm', next: 'lo' },
+                'lo': { entry: '/main/3lo.webm', idle: '/main/stretch_3lo_idle.webm', next: 'loo' },
+                'loo': { entry: '/main/3loo.webm', idle: '/main/3loo_idle.webm', next: 'look' },
+                'look': { entry: '/main/3look.webm', idle: '/main/stretch1_3look_idle.webm', next: 'look' },
             }
         };
         window.spellCursor = new SpellCursor(cursorVocabulary, getNextCursorVideo, cursorGpuOptions, defaultCursorEventHandlers, cursorVocabulary);
@@ -668,7 +673,6 @@ function mainNextVideoStrategy(currentVideo) {
     if (window.mainState === 'opened_lantern') {
         this.currentNodeIndex = this.playgraph.nodes.findIndex(node => node.id === 'opened_lantern_idle');
         return '/main/opened_lantern_idle.webm';
-
     }
 }
 
