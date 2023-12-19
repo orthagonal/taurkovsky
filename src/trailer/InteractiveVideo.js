@@ -1,8 +1,10 @@
 
 /*
-interactive video class handles the webgpu rendering of the video:
-  - you configure it by passing it webgpu options
+  Interactive video class handles one or more VideoPlayers and 
+  the webgpu rendering for them, using the shader behavior that is applied to them.
 
+  You can change it's shader behavior at any time by calling setShaderBehavior
+  to switch to a different shader behavior.  
 */
 
 class InteractiveVideo {
@@ -31,18 +33,7 @@ class InteractiveVideo {
     // Set the pipeline and bind group layout for the current shader behavior
     this.shaderBehavior.getPipeline(this.webgpu);
     this.shaderBehavior.getBindGroupLayout(this.webgpu);
-    console.log('rendering frame');
     this.shaderBehavior.renderBindGroup(textures, renderPassEncoder, this.webgpu);
-    // renderPassEncoder.setPipeline(this.pipeline);
-    // const bindGroup = this.webgpu.device.createBindGroup({
-    //   layout: this.bindGroupLayout,
-    //   entries: [
-    //     { binding: 0, resource: this.webgpu.sampler },
-    //     // ... other bindings based on textures ...
-    //   ],
-    // });
-    // renderPassEncoder.setBindGroup(0, bindGroup);
-    // renderPassEncoder.draw(4, 1, 0, 0);
   }
 }
 

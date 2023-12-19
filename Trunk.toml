@@ -8,6 +8,7 @@ watch = [
   "./src/trailer/VideoPlayer.js",
   "./src/trailer/ShaderBehavior.js",
   "./src/trailer/SpellCursorBehaviors.js",
+  "./src/trailer/SpellCursor.js",
   "./src/trailer/playgraph.js",
   "./src/trailer/player.html",
   "./src/trailer/main",

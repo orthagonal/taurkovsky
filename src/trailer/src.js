@@ -1,187 +1,11 @@
+import { extractWebmPaths } from './utilities.js';
+import InteractiveVideo from './InteractiveVideo.js';
+import VideoPlayer from './VideoPlayer.js';
+import { DefaultShaderBehavior } from './ShaderBehavior.js';
+import SpellCursor from './SpellCursor.js';
+window.debug = true;
 let lastFrameTime = Date.now();
 let frameCount = 0;
-
-function updateFPS() {
-    const now = Date.now();
-    const deltaTime = now - lastFrameTime;
-    frameCount++;
-
-    // Update FPS every second
-    if (deltaTime >= 1000) {
-        const fps = frameCount;
-        frameCount = 0;
-        lastFrameTime = now;
-
-        // Update the FPS counter on the page
-        document.getElementById('fpsCounter').innerText = 'FPS: ' + fps;
-    }
-}
-
-const startTime = performance.now();
-
-const cursorVertexShaderCode = /* wgsl */`
-
-struct VertexOutput {
-    @builtin(position) Position : vec4<f32>,
-    @location(0) fragUV : vec2<f32>,
-}
-
-@vertex
-fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-    var pos = array<vec2<f32>, 4>(
-        vec2(-1.0, 1.0),   // top-left
-        vec2(-1.0, -1.0),  // bottom-left
-        vec2(1.0, 1.0),    // top-right
-        vec2(1.0, -1.0)    // bottom-right
-    );
-
-    const uv = array(
-        vec2(0.0, 0.0),  // top-left (y-coordinate flipped)
-        vec2(0.0, 1.0),  // bottom-left (y-coordinate flipped)
-        vec2(1.0, 0.0),  // top-right (y-coordinate flipped)
-        vec2(1.0, 1.0)   // bottom-right (y-coordinate flipped)
-    );
-
-    var output : VertexOutput;
-    output.Position = vec4<f32>(pos[vertexIndex], 0.0, 1.0);
-    output.fragUV = uv[vertexIndex];
-    return output;
-}
-`;
-
-
-const cursorFragmentShaderCode = /* wgsl */`
-struct MouseUniform {
-    mousePosition: vec2<f32>
-};
-
-struct CursorUniform {
-    useMask: u32
-};
-
-struct Constants {
-    screenWidth: f32,
-    screenHeight: f32,
-    cursorWidth: f32,
-    cursorHeight: f32,
-    cursorActive: f32,
-    activeRadius: f32
-};
-
-@group(0) @binding(0) var mySampler: sampler;
-@group(0) @binding(1) var smallTexture: texture_external;
-@group(0) @binding(2) var<uniform> mousePosition: MouseUniform;
-@group(0) @binding(3) var<uniform> constants: Constants;
-@group(0) @binding(4) var maskTexture: texture_external;
-
-@fragment
-fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
-    let halfCursorWidth = constants.cursorWidth / constants.screenWidth / 2.0;
-    let halfCursorHeight = constants.cursorHeight / constants.screenHeight / 2.0;
-    let leftBoundary = mousePosition.mousePosition.x -halfCursorWidth;
-    let rightBoundary = mousePosition.mousePosition.x + halfCursorWidth;
-    let bottomBoundary = mousePosition.mousePosition.y - halfCursorHeight;
-    let topBoundary = mousePosition.mousePosition.y + halfCursorHeight;
-
-    let isWithinCursor = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
-                         fragUV.y > bottomBoundary && fragUV.y < topBoundary;
-
-    if (isWithinCursor) {
-        let uCoord = (fragUV.x - leftBoundary) / (2.0 * halfCursorWidth);
-        let vCoord = (fragUV.y - bottomBoundary) / (2.0 * halfCursorHeight);
-        let adjustedUV = vec2<f32>(uCoord, vCoord);
-
-        // Sample color from smallTexture and maskTexture
-        let colorFromSmallTexture = textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
-            let colorFromMaskTexture = textureSampleBaseClampToEdge(maskTexture, mySampler, fragUV);
-            // If the alpha value of the pixel in smallTexture is less than 1.0, use the pixel from hitboxTexture
-            if (colorFromSmallTexture.a < 1.0) {
-                // if the hitbox color is black ignore it:
-                if (colorFromMaskTexture.r == 0.0 && colorFromMaskTexture.g == 0.0 && colorFromMaskTexture.b == 0.0) {
-                    return vec4<f32>(0.0, 1.0, 0.0, 1.0);
-                }
-                // if it's close to the center show it
-                var cursorCenter = vec2<f32>(mousePosition.mousePosition.x * 2.0, mousePosition.mousePosition.y);
-                var adjustedFragUV = vec2<f32>(fragUV.x * 2.0 , fragUV.y );
-                var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
-                var thresholdDistance = 0.05;
-                if (distanceFromCenter <= thresholdDistance) {
-                    var bias = 0.9; // Adjust as needed to bias more or less in favor of smallTexture
-                    var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
-                    var beta = 1.0 - alpha; // Inverse alpha value for blending
-                    // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 
-                    var blendedColor = alpha * colorFromSmallTexture + beta * colorFromMaskTexture;
-                    return blendedColor;
-                }
-            }
-        return colorFromSmallTexture;
-    }
-    return vec4<f32>(0.0, 0.0, 1.0, 1.0);
-}
-`;
-
-const cursorFragmentShaderCodeNoMask = /* wgsl */`
-struct MouseUniform {
-  mousePosition: vec2<f32>
-};
-
-struct CursorUniform {
-  useMask: u32
-};
-
-struct Constants {
-  screenWidth: f32,
-  screenHeight: f32,
-  cursorWidth: f32,
-  cursorHeight: f32,
-  cursorActive: f32,
-  activeRadius: f32
-};
-
-@group(0) @binding(0) var mySampler: sampler;
-@group(0) @binding(1) var smallTexture: texture_external;
-@group(0) @binding(2) var<uniform> mousePosition: MouseUniform;
-@group(0) @binding(3) var<uniform> constants: Constants;
-
-@fragment
-fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
-  let halfCursorWidth = constants.cursorWidth / constants.screenWidth / 2.0;
-  let halfCursorHeight = constants.cursorHeight / constants.screenHeight / 2.0;
-  let leftBoundary = mousePosition.mousePosition.x - halfCursorWidth;
-  let rightBoundary = mousePosition.mousePosition.x + halfCursorWidth;
-  let bottomBoundary = mousePosition.mousePosition.y - halfCursorHeight;
-  let topBoundary = mousePosition.mousePosition.y + halfCursorHeight;
-
-  let isWithinCursor = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
-                      fragUV.y > bottomBoundary && fragUV.y < topBoundary;
-
-  if (isWithinCursor) {
-    let uCoord = (fragUV.x - leftBoundary) / (2.0 * halfCursorWidth);
-    let vCoord = (fragUV.y - bottomBoundary) / (2.0 * halfCursorHeight);
-    let adjustedUV = vec2<f32>(uCoord, vCoord);
-
-    let colorFromSmallTexture = textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
-    if (colorFromSmallTexture.a < 1.0) {
-        // if it's close to the center show itl
-        var cursorCenter = vec2<f32>(mousePosition.mousePosition.x * 2.0, mousePosition.mousePosition.y);
-        var adjustedFragUV = vec2<f32>(fragUV.x * 2.0 , fragUV.y );
-        var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
-        var thresholdDistance = 0.05;
-        if (distanceFromCenter <= thresholdDistance) {
-            var bias = 0.9; // Adjust as needed to bias more or less in favor of smallTexture
-            var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
-            var beta = 1.0 - alpha; // Inverse alpha value for blending
-            // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 
-            var blendedColor = alpha * colorFromSmallTexture;
-            return blendedColor;
-        }
-    }
-    return textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
-  }
-
-  return vec4<f32>(0.0, 0.0, 1.0, 1.0);
-}
-`;
 
 const cursorHitboxShaderCode = /*wgsl*/`
 struct MouseUniform {
@@ -235,11 +59,12 @@ fn main(
 }
 `;
 
-import InteractiveVideo from './InteractiveVideo.js';
-import VideoPlayer from './VideoPlayer.js';
-import { DefaultShaderBehavior } from './ShaderBehavior.js';
-import { CursorMaskShaderBehavior, CursorNoMaskShaderBehavior } from './SpellCursorBehaviors.js';
 // global variables
+// vertex constants that can be tweaked
+let shudderAmount = 0.000002;
+let rippleStrength = 0.002;
+let rippleFrequency = 5.0;
+
 const screenWidth = 1920.0;
 const screenHeight = 1080.0;
 let cursorWidth = 512.0;
@@ -263,7 +88,7 @@ function setCursorSize(mode) {
             break;
     }
     device.queue.writeBuffer(
-        constantsBuffer,
+        cursorConstants,
         0,
         new Float32Array([screenWidth, screenHeight, cursorWidth, cursorHeight, cursorActive, activeRadius]).buffer
     );
@@ -278,45 +103,60 @@ window.userString = "";
 window.userInput = 'intro';
 // window.mainState = 'intro';
 window.mainState = 'side';
-window.cursorState = 'blank';
 
 let userKeyboardElement;
 let overlayCanvas, overlayContext;
 
 // WebGPU Variables
 let hitboxOutputBuffer; // the gpu writes the hitbox data to this buffer
+let cursorHitbox;
 let adapter, device, canvas, context;
-let mousePositionBuffer, constantsBuffer;
+let mousePositionBuffer, cursorConstants;
 let hitboxPipeline;  // Pipeline for rendering the video
 let hitboxBindGroup;
 let linearSampler = null;
-let fragmentShaderModules = {};
-let mainBGL, hitboxBGL;
-
+let hitboxBGL;
+let playgraph;
 let currentHitboxList = false;
 let cursorActive = 0.0;  // 1.0 when cursor is 'active' and can interact with things
-
 const textFlashAnimationDuration = 100;  // 500ms or 0.5 seconds
 let previousString = "";
 let wordCompleted = false;
-
-function setCursorActive(newValue) {
-    cursorActive = newValue;
-    device.queue.writeBuffer(
-        constantsBuffer,
-        0,
-        new Float32Array([screenWidth, screenHeight, cursorWidth, cursorHeight, cursorActive, activeRadius]).buffer
-    );
-}
-
 let activeRadius = 0.15;
 
 let mouseXNormalized;
 let mouseYNormalized;
 
+// UTILITY FUNCTIONS
+function updateFPS() {
+    const now = Date.now();
+    const deltaTime = now - lastFrameTime;
+    frameCount++;
+
+    // Update FPS every second
+    if (deltaTime >= 1000) {
+        const fps = frameCount;
+        frameCount = 0;
+        lastFrameTime = now;
+
+        // Update the FPS counter on the page
+        document.getElementById('fpsCounter').innerText = 'FPS: ' + fps;
+    }
+}
+
+
+function setCursorActive(newValue) {
+    cursorActive = newValue;
+    device.queue.writeBuffer(
+        cursorConstants,
+        0,
+        new Float32Array([screenWidth, screenHeight, cursorWidth, cursorHeight, cursorActive, activeRadius]).buffer
+    );
+}
+
 // Default cursor event handlers
 const defaultCursorEventHandlers = {
-    mousemove: async event => {
+    mousemove: async function (event) {
         // Get the canvas bounding rectangle
         const rect = canvas.getBoundingClientRect();
 
@@ -336,21 +176,21 @@ const defaultCursorEventHandlers = {
             mousePositionArray.buffer
         );
         // if they are in 'open' mode this makes the hand close:
-        if (window.cursorState === 'open') {
+        if (this.cursorState === 'open') {
             if (currentHighlightedHitbox?.name == 'handle') {
-                window.cursorState = 'open_hover';
+                this.cursorState = 'open_hover';
                 // this.cursorVideoPlayer.interuptVideo('open_hover.webm');
                 userInputQueue = ['open_hover'];
                 return;
             }
         }
         // when they leave the hand-hover state for 'open':
-        if (window.cursorState === 'open_hover') {
+        if (this.cursorState === 'open_hover') {
             if (!currentHighlightedHitbox) {
-                window.cursorState = 'open_hover_exit';
+                this.cursorState = 'open_hover_exit';
             }
         }
-        if (window.cursorState === 'look') {
+        if (this.cursorState === 'look') {
             // check if it's the green hitbox
             // todo: make this labelled hitboxes so playgraph has list of hitbox colors -> hitbox name
             if (currentHighlightedHitbox?.name == 'handle') {
@@ -358,18 +198,18 @@ const defaultCursorEventHandlers = {
                 return;
             }
         }
-        if (window.cursorState === 'look_at_handle_idle') {
-            window.cursorState = 'look_at_handle_exit';
+        if (this.cursorState === 'look_at_handle_idle') {
+            this.cursorState = 'look_at_handle_exit';
             userInputQueue = ['look'];
             return;
         }
     },
-    click: async event => {
-        if (window.mainState === 'intro' && window.cursorState === 'look') {
+    click: async function (event) {
+        if (window.mainState === 'intro' && this.cursorState === 'look') {
             window.userInput = 'side';
             return;
         }
-        if (window.mainState === 'side' && window.cursorState.includes('open_hover')) {
+        if (window.mainState === 'side' && this.cursorState.includes('open_hover')) {
             window.userInput = 'opened_lantern';
             return;
         }
@@ -377,10 +217,6 @@ const defaultCursorEventHandlers = {
     keydown: event => {
     }
 };
-
-let shudderAmount = 0.000002;
-let rippleStrength = 0.002;
-let rippleFrequency = 5.0;
 
 async function initWebGPU() {
     adapter = await navigator.gpu.requestAdapter();
@@ -413,13 +249,13 @@ async function initWebGPU() {
         ]).buffer
     );
 
-    constantsBuffer = device.createBuffer({
+    cursorConstants = device.createBuffer({
         size: 6 * 4,  // 6 constants of 4 bytes (float) each, includes things like mousepos, turbulence level and activation, etc
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
     device.queue.writeBuffer(
-        constantsBuffer,
+        cursorConstants,
         0,
         new Float32Array([screenWidth, screenHeight, cursorWidth, cursorHeight, cursorActive, activeRadius]).buffer
     );
@@ -429,7 +265,7 @@ async function initWebGPU() {
         minFilter: 'linear',
     });
 
-    fragmentShaderModules.cursorHitbox = device.createShaderModule({
+    cursorHitbox = device.createShaderModule({
         code: cursorHitboxShaderCode
     });
 
@@ -455,7 +291,6 @@ async function initWebGPU() {
 }
 
 async function renderFrame() {
-
     let mouseX = 0;
     let mouseY = 0;
 
@@ -469,10 +304,10 @@ async function renderFrame() {
     const renderPassDescriptor = {
         colorAttachments: [{
             view: currentTexture.createView(),
-            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
             loadOp: 'clear',
             storeOp: 'store',
-            loadValue: 'load',
+            loadValue: 'clear',
         }],
     };
     const commandEncoder = device.createCommandEncoder();
@@ -481,7 +316,11 @@ async function renderFrame() {
     // Wait for the video frame to update
     if (!window.mainInteractiveVideo.blocked) {
         window.mainInteractiveVideo.renderFrame(renderPassEncoder);
+        if (window.spellCursor) {
+            window.spellCursor.renderFrame(renderPassEncoder);
+        }
     }
+
     renderPassEncoder.end();
     device.queue.submit([commandEncoder.finish()]);
 
@@ -493,7 +332,6 @@ function updateTextAndCursor() {
         // console.time('dom_render');
         const textContainer = document.getElementById('textContainer');
         const latestLetterContainer = document.getElementById('latestLetterContainer');
-
         textContainer.style.left = `${mouseXNormalized * 100}%`;
         textContainer.style.top = `${20 + mouseYNormalized * 100}%`;
         if (!cursorActive) {
@@ -503,8 +341,8 @@ function updateTextAndCursor() {
 
                 // Set position based on mouseXNormalized and mouseYNormalized
                 // Assuming these values are in percentage (0-100), you might need to adjust this calculation
-                // latestLetterContainer.style.left = `${mouseXNormalized * 100}%`;
-                // latestLetterContainer.style.top = `${mouseYNormalized * 100}%`;
+                latestLetterContainer.style.left = `${mouseXNormalized * 100}%`;
+                latestLetterContainer.style.top = `${mouseYNormalized * 100}%`;
 
                 latestLetterContainer.classList.add("blur-animation");
 
@@ -540,6 +378,7 @@ function updateTextAndCursor() {
         resolve();
     });
 }
+
 async function renderLoop() {
     renderLoopCount++;
     updateFPS();
@@ -652,7 +491,7 @@ function updateHitboxBindGroup() {
         { binding: 0, resource: { buffer: hitboxOutputBuffer, type: 'storage' } },
         { binding: 1, resource: linearSampler },
         { binding: 2, resource: { buffer: mousePositionBuffer } },
-        { binding: 3, resource: { buffer: constantsBuffer } },
+        { binding: 3, resource: { buffer: cursorConstants } },
     ];
     // Check if the mask video is present and add it to the bind group
     if (window.mainVideoPlayer.activeVideos.hitbox &&
@@ -683,6 +522,7 @@ function videoNeedsUpdate(video, videoType) {
 let mainVideo = null;
 
 let renderLoopCount = 0;
+const startTime = performance.now();
 
 window.onload = async function () {
     overlayCanvas = document.getElementById("overlayCanvas");
@@ -693,32 +533,32 @@ window.onload = async function () {
     overlayContext = overlayCanvas.getContext("2d");
     await initWebGPU();
 
-    // Create the default cursor using the cursor plugin class
-    const cursorPlaygraph = window.Playgraph.getPlaygraph('one').cursor;
     let isLetterAnimating = false;
 
     window.addEventListener("keyup", (event) => {
+        if (!window.spellCursor) return;
         if (isLetterAnimating) return;  // If a letter is animating, ignore other keypresses
         // any key to exit a text state
-        if (window.cursorState === 'look_at_handle_idle') {
+        if (window.spellCursor.cursorState === 'look_at_handle_idle') {
             userInputQueue = ['look_at_handle_exit'];
             return;
         }
         if (event.key === "ArrowRight") {
             window.mainState = "side";
         } else if (event.key === "Backspace" || event.key === "Escape") {
-            window.cursorState = "blank";
+            window.spellCursor.cursorState = "blank";
             window.userString = "";
             userInputQueue = [];  // Clear the queue
         } else if (/^[a-zA-Z]$/.test(event.key)) {
             // For other input conditions
             window.userString += event.key.toLowerCase();
+            console.log('set to ', window.userString);
             // differentiate between 'l' for look vs 'l' for light
-            // if (window.mainState === 'side') {
-            //     if (window.userString === 'l') {
-            //         window.userString = 'light_l';
-            //     }
-            // }
+            if (window.mainState === 'side') {
+                if (window.userString === 'l') {
+                    window.userString = 'light_l';
+                }
+            }
             userInputQueue.push(window.userString);
             isLetterAnimating = true;  // Set the flag
 
@@ -729,31 +569,21 @@ window.onload = async function () {
         }
     });
 
-    const playgraph = window.Playgraph.getPlaygraph('one').main;
+    playgraph = window.Playgraph.getPlaygraph('one').main;
 
-    // Create the sampler and bind group for rendering the video
-    let bothVideosLoaded = 0;
     // Add listeners for various user interactions
-    console.log('add listeners');
     document.addEventListener('click', async function playOnInteraction() {
         document.removeEventListener('click', playOnInteraction);
-        // move this to the init after the videoA starts playing then there's a texture for it to import 
-        // const mainExternalTexture = device.importExternalTexture({ source: window.mainVideoPlayer.activeVideos.main });
-        // // Check if the mask video is present and add it to the bind group
-        // if (window.mainVideoPlayer.activeVideos.mask && 
-        //     window.mainVideoPlayer.activeVideos.mask.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        //     const maskVideoExternalTexture = device.importExternalTexture({ source: window.mainVideoPlayer.activeVideos.mask });
-        //     entries.push({ binding: 4, resource: maskVideoExternalTexture });
-        // }
 
         // you can customize the options of the main bind group
         const gpuOptions = {
             device,
             sampler: linearSampler,
-            constants: constantsBuffer,
+            constants: cursorConstants,
             vertexConstants: vertexConstantsBuffer,
         }
-        const videoPlayer = new VideoPlayer(playgraph, mainNextVideoStrategy, false);
+        const webmPaths = extractWebmPaths(playgraph);
+        const videoPlayer = new VideoPlayer(webmPaths, mainNextVideoStrategy, false);
         const mainBehavior = new DefaultShaderBehavior([videoPlayer]);
         window.mainInteractiveVideo = new InteractiveVideo(gpuOptions, videoPlayer, mainBehavior);
 
@@ -762,44 +592,20 @@ window.onload = async function () {
             context,
             sampler: linearSampler,
             hitboxBGL,
-            constants: constantsBuffer,
+            constants: cursorConstants,
+            vertexConstants: vertexConstantsBuffer,
+            mousePositionBuffer
         }
-        // const cursorMainPlayer = new VideoPlayer(playgraph, defaultCursorNextVideoStrategy, false);
-        // const cursorMaskPlayer = new VideoPlayer(playgraph, defaultCursorNextVideoStrategy, false);
-        // get the blank video node
-        // const blank = window.Playgraph.getPlaygraph('one').cursor.nodes.find(node => node.id === 'blank');
-        // window.cursorVideoPlayer = new VideoPlayer(device, cursorPlaygraph, getNextCursorVideo, blank, false);
-
-
-        // window.cursorInteractiveVideo = new InteractiveVideo(gpuOptions, cursorVideoPlayers, renderCursorBindGroup);
-
+        const cursorPlaygraph = window.Playgraph.getPlaygraph('one').cursor;
+        window.spellCursor = new SpellCursor(cursorPlaygraph, getNextCursorVideo, cursorGpuOptions, defaultCursorEventHandlers);
+        // Create the default cursor using the cursor plugin class
+        window.spellCursor.currentNodeIndex = 0;
         renderLoop();
         await new Promise(r => setTimeout(r, 200));
         await window.mainInteractiveVideo.start('');
+        await window.spellCursor.start();
     });
 };
-
-function defaultCursorNextVideoStrategy(currentVideo) {
-    const currentNode = this.playgraph.nodes[this.currentNodeIndex];
-    const currentEdgeIndex = currentNode.edges.findIndex(edge => currentVideo.src.includes(edge.id));
-    let nextEdgeIndex = (currentEdgeIndex + 1) % currentNode.edges.length;
-
-    // Select the next edge based on the global cursorState variable
-    const nextEdges = currentNode.edges.filter(edge => edge.tags.includes(window.cursorState));
-    if (nextEdges.length > 0) {
-        nextEdgeIndex = currentNode.edges.indexOf(nextEdges[0]);
-    }
-
-    const nextVideoPath = `/main/${currentNode.edges[nextEdgeIndex].id}`;
-
-    // Update the current node index if we transitioned to a different node
-    const nextNodeId = currentNode.edges[nextEdgeIndex].to;
-    const nextNodeIndex = this.playgraph.nodes.findIndex(node => node.id === nextNodeId);
-    if (nextNodeIndex !== -1) {
-        this.currentNodeIndex = nextNodeIndex;
-    }
-    return nextVideoPath;
-}
 
 function mainNextVideoStrategy(currentVideo) {
     // if (window.mainState === 'intro') {
@@ -809,12 +615,6 @@ function mainNextVideoStrategy(currentVideo) {
     //     }
     //     return '/main/front_forward_idle.webm';
     // }
-    if (window.mainState === 'side') {
-        window.mainState = 'side_reverse';
-        console.log('reverse')
-        return '/main/side_idle_reverse.webm';
-    }
-    console.log('forward');
     window.mainState = 'side';
     return '/main/side_idle.webm';
     // if (window.mainState === 'side') {
@@ -834,6 +634,21 @@ function mainNextVideoStrategy(currentVideo) {
         return '/main/opened_lantern_idle.webm';
 
     }
+}
+
+
+function getNextCursorVideo(currentVideo, playgraph, userInput) {
+    const nextUserInput = userInputQueue.shift() || '';
+    if (this.cursorState === 'blank') {
+        if (nextUserInput === 'o') {
+            this.cursorState = 'o';
+            return '/main/o.webm';
+        }
+    }
+    if (this.cursorState === 'o' || this.cursorState === 'o_idle') {
+        return '/main/o_idle.webm';
+    }
+    return '/main/blank.webm';
 }
 
 function defaultNextVideoStrategy(currentVideo) {
@@ -865,151 +680,7 @@ function defaultNextVideoStrategy(currentVideo) {
 
     return nextVideoPath;
 }
+;
 
-const stateTransitions = {
-    'blank': {
-        'o': '/main/o2.webm',
-        'l': {
-            default: '/main/3l.webm',
-            'side': '/main/light_l2.webm',
-        },
-        'light_l': '/main/light_l2.webm',
-    },
-    'o': {
-        'op': '/main/op4.webm',
-    },
-    'op': {
-        'ope': '/main/ope4.webm',
-    },
-    'ope': {
-        'open': '/main/open_4.webm',
-    },
-    'open': {
-        'open_hover': '/main/open_hover_3.webm',
-    },
-    'open_hover_exitlo': {
-        'open_hover': '/main/open_idle4.webm',
-    },
-    'l': {
-        'li': '/main/li.webm',
-        'lo': '/main/3lo.webm',
-    },
-    'lo': {
-        'loo': '/main/3loo.webm',
-    },
-    'loo': {
-        'look': '/main/3look.webm',
-    },
-    'look': {
-        'look_at_handle_enter': '/main/look_at_handle_open2.webm',
-    },
-    'look_at_handle_exit': {
-        'look': '/main/look_at_handle_exit2.webm'
-    },
-    'light_l': {
-        'li': '/main/li.webm',
-    },
-    'li': {
-        'lig': '/main/lig.webm',
-    },
-    'lig': {
-        'ligh': '/main/ligh.webm',
-    },
-    'ligh': {
-        'light': '/main/light.webm',
-    },
-};
 
-const autoTransitions = {
-    'open_hover': 'open_hover_idle',
-    'open_hover_exit': 'open',
-    'look_at_handle_enter': 'look_at_handle_idle',
-    // 'look_at_handle_exit': 'look'
-};
-
-function getNextCursorVideo(currentVideo, playgraph, userInput) {
-
-    const nextUserInput = userInputQueue.shift() || '';
-
-    // Check for automatic transitions first
-    const autoTransitionState = autoTransitions[window.cursorState];
-    if (autoTransitionState) {
-        const currentState = window.cursorState;
-        window.cursorState = autoTransitionState;
-        return getDefaultVideoForState(currentState) || currentVideo.src;
-    }
-
-    if (nextUserInput === '') {
-        return getDefaultVideoForState(window.cursorState) || currentVideo.src;
-    }
-
-    let nextState = stateTransitions[window.cursorState] && stateTransitions[window.cursorState][nextUserInput];
-    if (typeof nextState === 'object') {
-        nextState = nextState[window.mainState];
-        if (!nextState) {
-            nextState = stateTransitions[window.cursorState][nextUserInput].default;
-        }
-    }
-    if (nextState) {
-        window.cursorState = nextUserInput;
-        return nextState;
-    } else {
-        userInputQueue.unshift(nextUserInput); // push it back as it wasn't consumed
-        return getDefaultVideoForState(window.cursorState) || currentVideo.src;
-    }
-}
-
-function getDefaultVideoForState(state) {
-    // Returns a default video path for a given state, or null if none exists
-    const defaults = {
-        'blank': 'main/blank.webm',
-        // 'open' sequence
-        'o': 'main/o2_idle.webm',
-        'o_idle': 'main/o2_idle.webm',
-        'op': 'main/op_idle_5.webm',
-        'op_idle': 'main/op_idle_5.webm',
-        'ope': 'main/ope5_idle.webm',
-        'ope_idle': 'main/ope5_idle.webm',
-        'open': 'main/open_idle4.webm',
-        'open_idle': 'main/open_idle4.webm',
-        // 'light' sequence
-        // 'light_l': 'main/light_l_idle2.webm',
-        // 'light_l_idle': 'main/light_l_idle2.webm',
-        'li': 'main/li_idle.webm',
-        'li_idle': 'main/li_idle.webm',
-        'lig': 'main/lig_idle.webm',
-        'lig_idle': 'main/lig_idle.webm',
-        'ligh': 'main/ligh_idle.webm',
-        'ligh_idle': 'main/ligh_idle.webm',
-        'light': 'main/light_idle.webm',
-        'light_idle': 'main/light_idle.webm',
-        // 'look' sequence
-        'l': {
-            default: 'main/stretch2_3l_idle.webm',
-            'side': 'main/light_l_idle2.webm',
-        },
-        'l_idle': {
-            default: 'main/stretch2_3l_idle.webm',
-            side: 'main/light_l_idle2.webm',
-        },
-        'lo': 'main/stretch_3lo_idle.webm',
-        'lo_idle': 'main/stretch_3lo_idle.webm',
-        'loo': 'main/3loo_idle.webm',
-        'loo_idle': 'main/3loo_idle.webm',
-        'look': 'main/stretch1_3look_idle.webm',
-        'look_idle': 'main/stretch1_3look_idle.webm',
-        // 'look_at_handle' sequence
-        'look_at_handle_enter': 'main/look_at_handle_idle.webm',
-        'look_at_handle_idle': 'main/look_at_handle_idle.webm',
-        // open hover sequence
-        'open_hover': 'main/open_hover_3.webm',
-        'open_hover_idle': 'main/open_hover_idle3.webm',
-        'open_hover_exit': 'main/open_hover_exit3.webm',
-    };
-    let video = defaults[state];
-    if (typeof video === 'object') {
-        return video[window.mainState];
-    }
-    return video;
-}
 
