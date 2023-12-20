@@ -38,7 +38,7 @@ const vertexShaderCode = /* wgsl */`
 `;
 
 // pixels of the cursor when there is a mask applied
-const cursorFragmentShaderCode = /* wgsl */`
+const maskShaderCode = /* wgsl */`
     struct MouseUniform {
         mousePosition: vec2<f32>
     };
@@ -81,30 +81,30 @@ const cursorFragmentShaderCode = /* wgsl */`
 
             // Sample color from smallTexture and maskTexture
             let colorFromSmallTexture = textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
-                let colorFromMaskTexture = textureSampleBaseClampToEdge(maskTexture, mySampler, fragUV);
-                // If the alpha value of the pixel in smallTexture is less than 1.0, use the pixel from hitboxTexture
-                if (colorFromSmallTexture.a < 1.0) {
-                    // if the hitbox color is black ignore it:
-                    if (colorFromMaskTexture.r == 0.0 && colorFromMaskTexture.g == 0.0 && colorFromMaskTexture.b == 0.0) {
-                        return vec4<f32>(0.0, 1.0, 0.0, 1.0);
-                    }
-                    // if it's close to the center show it
-                    var cursorCenter = vec2<f32>(mousePosition.mousePosition.x * 2.0, mousePosition.mousePosition.y);
-                    var adjustedFragUV = vec2<f32>(fragUV.x * 2.0 , fragUV.y );
-                    var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
-                    var thresholdDistance = 0.05;
-                    if (distanceFromCenter <= thresholdDistance) {
-                        var bias = 0.9; // Adjust as needed to bias more or less in favor of smallTexture
-                        var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
-                        var beta = 1.0 - alpha; // Inverse alpha value for blending
-                        // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 
-                        var blendedColor = alpha * colorFromSmallTexture + beta * colorFromMaskTexture;
-                        return blendedColor;
-                    }
+            let colorFromMaskTexture = textureSampleBaseClampToEdge(maskTexture, mySampler, fragUV);
+            // If the alpha value of the pixel in smallTexture is less than 1.0, use the pixel from hitboxTexture
+            if (colorFromSmallTexture.a < 1.0) {
+                // if the hitbox color is black ignore it:
+                if (colorFromMaskTexture.r == 0.0 && colorFromMaskTexture.g == 0.0 && colorFromMaskTexture.b == 0.0) {
+                    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
                 }
+                // if it's close to the center show it
+                var cursorCenter = vec2<f32>(mousePosition.mousePosition.x * 2.0, mousePosition.mousePosition.y);
+                var adjustedFragUV = vec2<f32>(fragUV.x * 2.0 , fragUV.y );
+                var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
+                var thresholdDistance = 0.05;
+                if (distanceFromCenter <= thresholdDistance) {
+                    var bias = 0.4; // Adjust as needed to bias more or less in favor of smallTexture
+                    var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
+                    var beta = 1.0 - alpha; // Inverse alpha value for blending
+                    // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 
+                    var blendedColor = alpha * colorFromSmallTexture + beta * colorFromMaskTexture;
+                    return blendedColor;
+                }
+            }
             return colorFromSmallTexture;
         }
-        return vec4<f32>(0.0, 0.0, 1.0, 1.0);
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
 `;
 
@@ -287,16 +287,34 @@ class CursorMaskShaderBehavior extends ShaderBehavior {
     constructor(videoPlayers) {
         super(videoPlayers);
         this._pipeline = null; // Cache for the pipeline
+        this._bindGroupLayout = null; // cache for the bind group layout
+        this._vertexBindGroup = null; // cache for the vertex bind group
     }
 
     getPipeline(webgpu) {
         if (!this._pipeline) {
-            const vertexModule = webgpu.device.createShaderModule({ code: vertexShader });
-            const fragmentModule = webgpu.device.createShaderModule({ code: webgpu.fragmentShaderCode });
+            const vertexModule = webgpu.device.createShaderModule({ code: vertexShaderCode });
+            const fragmentModule = webgpu.device.createShaderModule({ code: maskShaderCode });
+
+            // Create vertex bind group layout
+            const vertexBGL = webgpu.device.createBindGroupLayout({
+                entries: [
+                    { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }
+                ]
+            });
+
+
+            // Create vertex bind group
+            this._vertexBindGroup = webgpu.device.createBindGroup({
+                layout: vertexBGL,
+                entries: [
+                    { binding: 0, resource: { buffer: webgpu.vertexConstants } }
+                ]
+            });
 
             this._pipeline = webgpu.device.createRenderPipeline({
                 layout: webgpu.device.createPipelineLayout({
-                    bindGroupLayouts: [this.getBindGroupLayout(webgpu)]
+                    bindGroupLayouts: [this.getBindGroupLayout(webgpu), vertexBGL]
                 }),
                 vertex: {
                     module: vertexModule,
@@ -331,34 +349,40 @@ class CursorMaskShaderBehavior extends ShaderBehavior {
     }
 
     getBindGroupLayout(webgpu) {
-        return webgpu.device.createBindGroupLayout({
-            entries: [
-                { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-                { binding: 1, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
-                { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-                { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-                { binding: 4, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} }
-            ]
-        });
+        if (!this._bindGroupLayout) {
+            this._bindGroupLayout = webgpu.device.createBindGroupLayout({
+                entries: [
+                    { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+                    { binding: 1, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
+                    { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+                    { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+                    { binding: 4, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} }
+                ]
+            });
+        }
+        return this._bindGroupLayout;
     }
 
     renderBindGroup(textureList, renderPassEncoder, webgpu) {
         const [cursorExternalTexture, maskExternalTexture] = textureList;
-        const bindGroup = webgpu.device.createBindGroup({
-            layout: this.getBindGroupLayout(webgpu),
-            entries: [
-                { binding: 0, resource: webgpu.sampler },
-                { binding: 1, resource: cursorExternalTexture },
-                { binding: 2, resource: { buffer: webgpu.mousePositionBuffer } },
-                { binding: 3, resource: { buffer: webgpu.constants } },
-                { binding: 4, resource: maskExternalTexture }
-            ]
-        });
+        if (cursorExternalTexture && maskExternalTexture) {
+            const bindGroup = webgpu.device.createBindGroup({
+                layout: this.getBindGroupLayout(webgpu),
+                entries: [
+                    { binding: 0, resource: webgpu.sampler },
+                    { binding: 1, resource: cursorExternalTexture },
+                    { binding: 2, resource: { buffer: webgpu.mousePositionBuffer } },
+                    { binding: 3, resource: { buffer: webgpu.constants } },
+                    { binding: 4, resource: maskExternalTexture }
+                ]
+            });
 
-        renderPassEncoder.setPipeline(this.getPipeline(webgpu));
-        renderPassEncoder.setBindGroup(0, bindGroup);
-        renderPassEncoder.setBindGroup(1, webgpu.vertexBindGroup);
-        renderPassEncoder.draw(4, 1, 0, 0);
+            renderPassEncoder.setPipeline(this.getPipeline(webgpu));
+            renderPassEncoder.setBindGroup(0, bindGroup);
+            renderPassEncoder.setBindGroup(1, this._vertexBindGroup);
+            renderPassEncoder.draw(4, 1, 0, 0);
+        }
+
     }
 
     getVideoTextures(device) {

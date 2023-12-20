@@ -3,79 +3,102 @@ import InteractiveVideo from './InteractiveVideo.js';
 import VideoPlayer from './VideoPlayer.js';
 
 function extractWebmPathsFromVocabulary(cursorVocabulary) {
-  let webmPaths = new Set(); // Using a Set to avoid duplicates
+    let webmPaths = new Set(); // Using a Set to avoid duplicates
 
-  for (const wordFragments of Object.values(cursorVocabulary)) {
-    for (const fragment of Object.values(wordFragments)) {
-      webmPaths.add(fragment.entry);
-      webmPaths.add(fragment.idle);
+    for (const wordFragments of Object.values(cursorVocabulary)) {
+        for (const fragment of Object.values(wordFragments)) {
+            webmPaths.add(fragment.entry);
+            webmPaths.add(fragment.idle);
+        }
     }
-  }
 
-  return Array.from(webmPaths); // Convert the set back to an array
+    return Array.from(webmPaths); // Convert the set back to an array
 }
 
 class SpellCursor {
-  constructor(cursorVocabulary, nextVideoFunction, webgpuOptions, eventHandlers) {
-    this.cursorVocabulary = cursorVocabulary;
-    // Initialize video players
-    const videoList = extractWebmPathsFromVocabulary(cursorVocabulary);
-    videoList.push('/main/blank.webm');
-    console.log('cursor starting with videoList', videoList);
-    this.cursorVideoPlayer = new VideoPlayer(videoList, nextVideoFunction.bind(this));
-    // this.maskVideoPlayer = new VideoPlayer(playgraph, nextVideoFunction.bind(this));
+    constructor(cursorVocabulary, cursorVideoPlan, webgpuOptions, eventHandlers) {
+        this.cursorVocabulary = cursorVocabulary;
+        this.maskVideoList = cursorVocabulary._masks;
+        delete this.cursorVocabulary._masks;
+        // Initialize video players
+        const videoList = extractWebmPathsFromVocabulary(cursorVocabulary);
+        videoList.push('/main/blank.webm');
+        console.log('cursor starting with videoList', videoList);
+        this.cursorVideoPlayer = new VideoPlayer(videoList, cursorVideoPlan.main.bind(this), 'cursorMain');
+        //. augment the video player with a mask video player
+        console.log('mask video list', this.maskVideoList);
+        this.maskVideoPlayer = new VideoPlayer(this.maskVideoList, cursorVideoPlan.mask.bind(this), 'cursorMask');
+        // Default to no-mask cursor behavior
+        this.currentBehavior = new CursorNoMaskShaderBehavior([this.cursorVideoPlayer]);
 
-    // Default to no-mask cursor behavior
-    this.currentBehavior = new CursorNoMaskShaderBehavior([this.cursorVideoPlayer]);
+        // Initialize InteractiveVideo
+        this.interactiveVideo = new InteractiveVideo(webgpuOptions, [this.cursorVideoPlayer], this.currentBehavior);
 
-    // Initialize InteractiveVideo
-    this.interactiveVideo = new InteractiveVideo(webgpuOptions, [this.cursorVideoPlayer], this.currentBehavior);
-
-    // Register event handlers
-    this.eventHandlers = eventHandlers;
-    for (const [event, handler] of Object.entries(eventHandlers)) {
-      console.log('registering', event, handler);
-      // Assuming the event handling setup
-      const boundHandler = handler.bind(this);
-      window.addEventListener(event, boundHandler);
+        // Register event handlers
+        this.eventHandlers = eventHandlers;
+        for (const [event, handler] of Object.entries(eventHandlers)) {
+            console.log('registering', event, handler);
+            // Assuming the event handling setup
+            const boundHandler = handler.bind(this);
+            window.addEventListener(event, boundHandler);
+        }
+        // the main way we control the cursor is via it's state
+        this.cursorState = 'blank';
     }
-    // the main way we control the cursor is via it's state
-    this.cursorState = 'blank';
-  }
 
-  findVocabularyWord(fragment) {
-    for (const [word, fragments] of Object.entries(this.cursorVocabulary)) {
-      if (fragments.hasOwnProperty(fragment)) {
-        return word;
-      }
+    findVocabularyWord(fragment) {
+        for (const [word, fragments] of Object.entries(this.cursorVocabulary)) {
+            if (fragments.hasOwnProperty(fragment)) {
+                return word;
+            }
+        }
+        if (fragment === 'blank') {
+            return 'blank';
+        }
+        return null; // or handle this case as appropriate
     }
-    if (fragment === 'blank') {
-      return 'blank';
+
+    getMaskVideoPath(videoPath) {
+        // Extract the base name of the video and append '_mask.webm'
+        // remove the host name and just get the path with leading slash
+        videoPath = new URL(videoPath).pathname.replace('.webm', '_mask.webm');
+        console.log('vid path is ', videoPath);
+        return videoPath;
     }
-    return null; // or handle this case as appropriate
-  }
 
-  switchToMaskCursor() {
-    // Switch to mask cursor behavior
-    this.currentBehavior = new CursorMaskShaderBehavior([this.cursorVideoPlayer, this.maskVideoPlayer]);
-    this.interactiveVideo.setShaderBehavior(this.currentBehavior);
-  }
+    async switchToMaskCursor() {
+        // Temporary one-time event handler to start the mask video when this cursor video ends
+        const oneTimeHandler = async () => {
+            console.log('cursor video ended, starting mask video');
+            const currentVideoPath = this.cursorVideoPlayer.currentVideo.src;
+            if (!currentVideoPath.includes('/main/blank.webm')) {
+                this.cursorVideoPlayer.currentVideo.removeEventListener('ended', oneTimeHandler);
+                console.log('current video path', currentVideoPath);
+                const maskVideoPath = this.getMaskVideoPath(currentVideoPath);
+                console.log('mask video path', maskVideoPath);
+                await this.maskVideoPlayer.start(maskVideoPath);
+                this.currentBehavior = new CursorMaskShaderBehavior([this.cursorVideoPlayer, this.maskVideoPlayer]);
+                this.interactiveVideo.setShaderBehavior(this.currentBehavior);
+                // Remove the temporary handler after it's called
+            }
+        };
+        this.cursorVideoPlayer.currentVideo.addEventListener('ended', oneTimeHandler);
+    }
 
-  switchToNoMaskCursor() {
-    // Switch back to no-mask cursor behavior
-    this.currentBehavior = new CursorNoMaskShaderBehavior([this.cursorVideoPlayer]);
-    this.interactiveVideo.setShaderBehavior(this.currentBehavior);
-  }
+    switchToNoMaskCursor() {
+        // Switch back to no-mask cursor behavior
+        this.currentBehavior = new CursorNoMaskShaderBehavior([this.cursorVideoPlayer]);
+        this.interactiveVideo.setShaderBehavior(this.currentBehavior);
+    }
 
-  async start(path) {
-    await this.cursorVideoPlayer.start(path);
-  }
+    async start(path) {
+        await this.cursorVideoPlayer.start(path);
+    }
 
-  renderFrame(renderPassEncoder) {
-    this.interactiveVideo.renderFrame(renderPassEncoder);
-  }
+    renderFrame(renderPassEncoder) {
+        this.interactiveVideo.renderFrame(renderPassEncoder);
+    }
 }
-
 
 export default SpellCursor;
 

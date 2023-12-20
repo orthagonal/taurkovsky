@@ -35,6 +35,10 @@ class InteractiveVideo {
     this.shaderBehavior.getBindGroupLayout(this.webgpu);
     this.shaderBehavior.renderBindGroup(textures, renderPassEncoder, this.webgpu);
   }
+
+  setShaderBehavior(shaderBehavior) {
+    this.shaderBehavior = shaderBehavior;
+  }
 }
 
 export default InteractiveVideo;

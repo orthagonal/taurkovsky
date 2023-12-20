@@ -523,105 +523,74 @@ let mainVideo = null;
 let renderLoopCount = 0;
 const startTime = performance.now();
 
-window.onload = async function () {
-    overlayCanvas = document.getElementById("overlayCanvas");
-    window.addEventListener('resize', function () {
-        overlayCanvas.width = window.innerWidth;
-        overlayCanvas.height = window.innerHeight;
-    });
-    overlayContext = overlayCanvas.getContext("2d");
-    await initWebGPU();
+async function playOnInteraction() {
+    document.removeEventListener('click', playOnInteraction);
 
-    let isLetterAnimating = false;
+    // you can customize the options of the main bind group
+    const gpuOptions = {
+        device,
+        sampler: linearSampler,
+        constants: cursorConstants,
+        vertexConstants: vertexConstantsBuffer,
+    }
+    const webmPaths = extractWebmPaths(playgraph);
+    const videoPlayer = new VideoPlayer(webmPaths, mainNextVideoStrategy, false);
+    const mainBehavior = new DefaultShaderBehavior([videoPlayer]);
+    window.mainInteractiveVideo = new InteractiveVideo(gpuOptions, videoPlayer, mainBehavior);
 
-    window.addEventListener("keyup", (event) => {
-        if (!window.spellCursor) return;
-        if (isLetterAnimating) return;  // If a letter is animating, ignore other keypresses
-        // any key to exit a text state
-        if (window.spellCursor.cursorState === 'look_at_handle_idle') {
-            userInputQueue = ['look_at_handle_exit'];
-            return;
+    const cursorGpuOptions = {
+        device,
+        context,
+        sampler: linearSampler,
+        hitboxBGL,
+        constants: cursorConstants,
+        vertexConstants: vertexConstantsBuffer,
+        mousePositionBuffer
+    }
+    // const cursorPlaygraph = window.Playgraph.getPlaygraph('one').cursor;
+    const cursorVocabulary = {
+        '_masks': [
+            '/main/stretch2_3l_idle_mask.webm',
+            '/main/stretch1_3look_idle_mask.webm',
+        ],
+        'blank': {
+            'blank': { entry: '/main/blank.webm', idle: '/main/blank.webm', next: 'blank' },
+        },
+        'open': {
+            'o': { entry: '/main/o2.webm', idle: '/main/o2_idle.webm', next: 'op' },
+            'op': { entry: '/main/op4.webm', idle: '/main/op_idle.webm', next: 'ope' },
+            'ope': { entry: '/main/ope4.webm', idle: '/main/ope5_idle.webm', next: 'open' },
+            'open': { entry: '/main/open_4.webm', idle: '/main/open_idle.webm', next: 'open' },
+        },
+        'look': {
+            'l': { entry: '/main/3l.webm', idle: '/main/stretch2_3l_idle.webm', next: 'lo' },
+            'lo': { entry: '/main/3lo.webm', idle: '/main/stretch_3lo_idle.webm', next: 'loo' },
+            'loo': { entry: '/main/3loo.webm', idle: '/main/3loo_idle.webm', next: 'look' },
+            'look': { entry: '/main/3look.webm', idle: '/main/stretch1_3look_idle.webm', next: 'look' },
         }
-        if (event.key === "ArrowRight") {
-            window.mainState = "side";
-        } else if (event.key === "Backspace" || event.key === "Escape") {
-            window.spellCursor.cursorState = "blank";
-            window.userString = "";
-            userInputQueue = [];  // Clear the queue
-        } else if (/^[a-zA-Z]$/.test(event.key)) {
-            // For other input conditions
-            window.userString += event.key.toLowerCase();
-            // differentiate between 'l' for look vs 'l' for light
-            if (window.mainState === 'side') {
-                // if (window.userString === 'l') {
-                //     window.userString = 'light_l';
-                // }
-            }
-            userInputQueue.push(window.userString);
-            isLetterAnimating = true;  // Set the flag
+    };
+    const cursorPlan = {
+        main: getNextCursorVideo,
+        mask: getNextCursorMaskVideo
+    };
+    window.spellCursor = new SpellCursor(cursorVocabulary, cursorPlan, cursorGpuOptions, defaultCursorEventHandlers);
+    // Create the default cursor using the cursor plugin class
+    window.spellCursor.currentNodeIndex = 0;
+    renderLoop();
+    await new Promise(r => setTimeout(r, 200));
+    await window.mainInteractiveVideo.start('');
+    await window.spellCursor.start('/main/blank.webm');
+}
 
-            // Reset the flag after a delay (corresponding to the duration of the animation + the half-second delay)
-            setTimeout(() => {
-                isLetterAnimating = false;
-            }, textFlashAnimationDuration + 500);
-        }
-    });
-
-    playgraph = window.Playgraph.getPlaygraph('one').main;
-
-    // Add listeners for various user interactions
-    document.addEventListener('click', async function playOnInteraction() {
-        document.removeEventListener('click', playOnInteraction);
-
-        // you can customize the options of the main bind group
-        const gpuOptions = {
-            device,
-            sampler: linearSampler,
-            constants: cursorConstants,
-            vertexConstants: vertexConstantsBuffer,
-        }
-        const webmPaths = extractWebmPaths(playgraph);
-        const videoPlayer = new VideoPlayer(webmPaths, mainNextVideoStrategy, false);
-        const mainBehavior = new DefaultShaderBehavior([videoPlayer]);
-        window.mainInteractiveVideo = new InteractiveVideo(gpuOptions, videoPlayer, mainBehavior);
-
-        const cursorGpuOptions = {
-            device,
-            context,
-            sampler: linearSampler,
-            hitboxBGL,
-            constants: cursorConstants,
-            vertexConstants: vertexConstantsBuffer,
-            mousePositionBuffer
-        }
-        // const cursorPlaygraph = window.Playgraph.getPlaygraph('one').cursor;
-        const cursorVocabulary = {
-            'blank': {
-                'blank': { entry: '/main/blank.webm', idle: '/main/blank.webm', next: 'blank' },
-            },
-            'open': {
-                'o': { entry: '/main/o2.webm', idle: '/main/o2_idle.webm', next: 'op' },
-                'op': { entry: '/main/op4.webm', idle: '/main/op_idle.webm', next: 'ope' },
-                'ope': { entry: '/main/ope4.webm', idle: '/main/ope5_idle.webm', next: 'open' },
-                'open': { entry: '/main/open_4.webm', idle: '/main/open_idle.webm', next: 'open' },
-            },
-            'look': {
-                'l': { entry: '/main/3l.webm', idle: '/main/stretch2_3l_idle.webm', next: 'lo' },
-                'lo': { entry: '/main/3lo.webm', idle: '/main/stretch_3lo_idle.webm', next: 'loo' },
-                'loo': { entry: '/main/3loo.webm', idle: '/main/3loo_idle.webm', next: 'look' },
-                'look': { entry: '/main/3look.webm', idle: '/main/stretch1_3look_idle.webm', next: 'look' },
-            }
-        };
-        window.spellCursor = new SpellCursor(cursorVocabulary, getNextCursorVideo, cursorGpuOptions, defaultCursorEventHandlers, cursorVocabulary);
-        // Create the default cursor using the cursor plugin class
-        window.spellCursor.currentNodeIndex = 0;
-        renderLoop();
-        await new Promise(r => setTimeout(r, 200));
-        await window.mainInteractiveVideo.start('');
-        await window.spellCursor.start('/main/blank.webm');
-    });
-};
-
+function getNextCursorMaskVideo(currentVideo, playgraph, userInput) {
+    console.log('getNextCursorMaskVideo', currentVideo.src, userInput);
+    const nextUserInput = userInputQueue.shift() || '';
+    // if we're just staying in blank mode
+    if (this.cursorState !== 'blank') {
+        return '/main/stretch2_3l_idle_mask.webm';
+    }
+    return '/main/blank.webm';
+}
 
 function getNextCursorVideo(currentVideo, playgraph, userInput) {
     const nextUserInput = userInputQueue.shift() || '';
@@ -632,9 +601,8 @@ function getNextCursorVideo(currentVideo, playgraph, userInput) {
     const vocabularyWord = this.findVocabularyWord(this.cursorState);
     const vocabulary = this.cursorVocabulary[vocabularyWord];
     let nextFragment = vocabulary[this.cursorState];
-    console.log('next fragment', nextFragment);
     if (!nextFragment) {
-        console.log('error no next fragment for ', this.cursorState);
+        alert('error no next fragment for ', this.cursorState);
         return '/main/blank.webm';
     }
     const nextState = nextUserInput !== '' ? nextUserInput : this.cursorState;
@@ -642,9 +610,13 @@ function getNextCursorVideo(currentVideo, playgraph, userInput) {
         return nextFragment.idle;
     }
     if (nextState !== this.cursorState) {
+        if (nextState === 'l') {
+            this.switchToMaskCursor();
+        }
         this.cursorState = nextState;
         return vocabulary[nextFragment.next].entry;
     }
+
     return '/main/blank.webm';
 }
 
@@ -707,5 +679,53 @@ function defaultNextVideoStrategy(currentVideo) {
 }
 ;
 
+// initialize and wait for the user to interact with the page
+window.onload = async function () {
+    overlayCanvas = document.getElementById("overlayCanvas");
+    window.addEventListener('resize', function () {
+        overlayCanvas.width = window.innerWidth;
+        overlayCanvas.height = window.innerHeight;
+    });
+    overlayContext = overlayCanvas.getContext("2d");
+    await initWebGPU();
 
+    let isLetterAnimating = false;
 
+    window.addEventListener("keyup", (event) => {
+        if (!window.spellCursor) return;
+        if (isLetterAnimating) return;  // If a letter is animating, ignore other keypresses
+        // any key to exit a text state
+        if (window.spellCursor.cursorState === 'look_at_handle_idle') {
+            userInputQueue = ['look_at_handle_exit'];
+            return;
+        }
+        if (event.key === "ArrowRight") {
+            window.mainState = "side";
+        } else if (event.key === "Backspace" || event.key === "Escape") {
+            window.spellCursor.cursorState = "blank";
+            window.userString = "";
+            userInputQueue = [];  // Clear the queue
+        } else if (/^[a-zA-Z]$/.test(event.key)) {
+            // For other input conditions
+            window.userString += event.key.toLowerCase();
+            // differentiate between 'l' for look vs 'l' for light
+            if (window.mainState === 'side') {
+                // if (window.userString === 'l') {
+                //     window.userString = 'light_l';
+                // }
+            }
+            userInputQueue.push(window.userString);
+            isLetterAnimating = true;  // Set the flag
+
+            // Reset the flag after a delay (corresponding to the duration of the animation + the half-second delay)
+            setTimeout(() => {
+                isLetterAnimating = false;
+            }, textFlashAnimationDuration + 500);
+        }
+    });
+
+    playgraph = window.Playgraph.getPlaygraph('one').main;
+
+    // Add listeners for various user interactions
+    document.addEventListener('click', playOnInteraction);
+};
