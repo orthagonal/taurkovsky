@@ -1,74 +1,29 @@
-import { extractWebmPaths } from './utilities.js';
+import { extractWebmPathsFromObject } from './utilities.js';
 import InteractiveVideo from './InteractiveVideo.js';
 import VideoPlayer from './VideoPlayer.js';
 import { DefaultShaderBehavior } from './ShaderBehavior.js';
-import SpellCursor from './SpellCursor.js';
+import { DistortionShaderBehavior } from './DistortionShaderBehavior.js';
+import SpellCursor from './game1/SpellCursor.js';
+const currentGame = require('./game1/module.js');
+
 window.debug = true;
 let lastFrameTime = Date.now();
 let frameCount = 0;
 
-const cursorHitboxShaderCode = /*wgsl*/`
-struct MouseUniform {
-    mousePosition: vec2<f32>
-};
-
-struct Constants {
-    screenWidth: i32,
-    screenHeight: i32,
-    cursorWidth: f32,
-    cursorHeight: f32,
-    cursorActive: f32,
-    activeRadius: f32
-};
-
-// Define the structure for output data
-// struct Data {
-//     pixelInfo: vec4<u32>
-// };
-// @binding(0) @group(0) var<storage, write> hitboxOutput: array<Data>;
-@binding(0) @group(0) var<storage, read_write> hitboxOutput: vec4<f32>;
-@binding(1) @group(0) var mySampler: sampler;
-@binding(2) @group(0) var<uniform> mousePosition: MouseUniform;
-@binding(3) @group(0) var<uniform> constants: Constants;
-@binding(4) @group(0) var hitboxTexture: texture_external; //texture_2d<f32>;
- 
-@compute @workgroup_size(8,8, 1)
-fn main(
-    @builtin(global_invocation_id) id: vec3<u32>
-) {
-    let halfCursorWidth = constants.cursorWidth / f32(constants.screenWidth) / 2.0;
-    let halfCursorHeight = constants.cursorHeight / f32(constants.screenHeight) / 2.0;
-    let thresholdDistance = constants.activeRadius;
-
-    let startX = max(mousePosition.mousePosition.x - thresholdDistance, 0.0);
-    let endX = min(mousePosition.mousePosition.x + thresholdDistance, 1.0);
-    let startY = max(mousePosition.mousePosition.y - thresholdDistance, 0.0);
-    let endY = min(mousePosition.mousePosition.y + thresholdDistance, 1.0);
-
-    var maxPixel = vec4<f32>(0.0, 0.0, 0.0, 0.0);
-    for (var x: f32 = startX; x <= endX; x += 1.0 / f32(constants.screenWidth)) {
-        for (var y: f32 = startY; y <= endY; y += 1.0 / f32(constants.screenHeight)) {
-            let pixelCoord = vec2<i32>(i32(x * f32(constants.screenWidth)), i32(y * f32(constants.screenHeight)));
-            // let currentPixel = textureSampleBaseClampToEdge(hitboxTexture, mySampler, pixelCoord);
-            // if (length(currentPixel.rgb) > length(maxPixel.rgb)) {
-            //     maxPixel = currentPixel;
-            // }
-        }
-    }
-    hitboxOutput = maxPixel;
-}
-`;
-
-// global variables
 // vertex constants that can be tweaked
 let shudderAmount = 0.000002;
 let rippleStrength = 0.002;
 let rippleFrequency = 5.0;
 
-const screenWidth = 1920.0;
-const screenHeight = 1080.0;
-let cursorWidth = 512.0;
-let cursorHeight = 288.0;
+const cursorVariables = {
+    screenWidth: 1920.0,
+    screenHeight: 1080.0,
+    cursorWidth: 512.0,
+    cursorHeight: 288.0,
+    cursorActive: 0.0,
+    activeRadius: 0.0
+};
+
 const CURSOR_MODES = {
     SMALL: "small",
     LARGE: "large"
@@ -90,19 +45,11 @@ function setCursorSize(mode) {
     device.queue.writeBuffer(
         cursorConstants,
         0,
-        new Float32Array([screenWidth, screenHeight, cursorWidth, cursorHeight, cursorActive, activeRadius]).buffer
+        new Float32Array([cursorVariables.screenWidth, cursorVariables.screenHeight, cursorVariables.cursorWidth, cursorVariables.cursorHeight, cursorVariables.cursorActive, cursorVariables.activeRadius]).buffer
     );
 }
 
-// current user input state stuff:
-let userInputQueue = [""];
 let currentHighlightedHitbox = null;
-// the string that we show to the user on screen
-// not sure why these are on window object
-window.userString = "";
-window.userInput = 'intro';
-// window.mainState = 'intro';
-window.mainState = 'side';
 
 let userKeyboardElement;
 let overlayCanvas, overlayContext;
@@ -118,14 +65,14 @@ let linearSampler = null;
 let hitboxBGL;
 let playgraph;
 let currentHitboxList = false;
-let cursorActive = 0.0;  // 1.0 when cursor is 'active' and can interact with things
-const textFlashAnimationDuration = 100;  // 500ms or 0.5 seconds
-let previousString = "";
-let wordCompleted = false;
-let activeRadius = 0.15;
 
-let mouseXNormalized;
-let mouseYNormalized;
+let hitboxBufferSize;
+let stagingBuffer;
+let mainVideo = null;
+
+let renderLoopCount = 0;
+const startTime = performance.now();
+
 
 // UTILITY FUNCTIONS
 function updateFPS() {
@@ -143,79 +90,6 @@ function updateFPS() {
         document.getElementById('fpsCounter').innerText = 'FPS: ' + fps;
     }
 }
-
-function setCursorActive(newValue) {
-    cursorActive = newValue;
-    device.queue.writeBuffer(
-        cursorConstants,
-        0,
-        new Float32Array([screenWidth, screenHeight, cursorWidth, cursorHeight, cursorActive, activeRadius]).buffer
-    );
-}
-
-// Default cursor event handlers
-const defaultCursorEventHandlers = {
-    mousemove: async function (event) {
-        // Get the canvas bounding rectangle
-        const rect = canvas.getBoundingClientRect();
-
-        // Calculate mouse position relative to the canvas
-        const xCanvasRelative = event.clientX - rect.left;
-        const yCanvasRelative = event.clientY - rect.top;
-
-        // Normalize the mouse position
-        mouseXNormalized = xCanvasRelative / canvas.width;
-        mouseYNormalized = yCanvasRelative / canvas.height;
-
-        // Update the buffer
-        const mousePositionArray = new Float32Array([mouseXNormalized, mouseYNormalized]);
-        device.queue.writeBuffer(
-            mousePositionBuffer,
-            0,
-            mousePositionArray.buffer
-        );
-        // if they are in 'open' mode this makes the hand close:
-        if (this.cursorState === 'open') {
-            if (currentHighlightedHitbox?.name == 'handle') {
-                this.cursorState = 'open_hover';
-                // this.cursorVideoPlayer.interuptVideo('open_hover.webm');
-                userInputQueue = ['open_hover'];
-                return;
-            }
-        }
-        // when they leave the hand-hover state for 'open':
-        if (this.cursorState === 'open_hover') {
-            if (!currentHighlightedHitbox) {
-                this.cursorState = 'open_hover_exit';
-            }
-        }
-        if (this.cursorState === 'look') {
-            // check if it's the green hitbox
-            // todo: make this labelled hitboxes so playgraph has list of hitbox colors -> hitbox name
-            if (currentHighlightedHitbox?.name == 'handle') {
-                userInputQueue = ['look_at_handle_enter'];
-                return;
-            }
-        }
-        if (this.cursorState === 'look_at_handle_idle') {
-            this.cursorState = 'look_at_handle_exit';
-            userInputQueue = ['look'];
-            return;
-        }
-    },
-    click: async function (event) {
-        if (window.mainState === 'intro' && this.cursorState === 'look') {
-            window.userInput = 'side';
-            return;
-        }
-        if (window.mainState === 'side' && this.cursorState.includes('open_hover')) {
-            window.userInput = 'opened_lantern';
-            return;
-        }
-    },
-    keydown: event => {
-    }
-};
 
 async function initWebGPU() {
     adapter = await navigator.gpu.requestAdapter();
@@ -256,7 +130,7 @@ async function initWebGPU() {
     device.queue.writeBuffer(
         cursorConstants,
         0,
-        new Float32Array([screenWidth, screenHeight, cursorWidth, cursorHeight, cursorActive, activeRadius]).buffer
+        new Float32Array([cursorVariables.screenWidth, cursorVariables.screenHeight, cursorVariables.cursorWidth, cursorVariables.cursorHeight, cursorVariables.cursorActive, cursorVariables.activeRadius]).buffer
     );
 
     linearSampler = device.createSampler({
@@ -264,29 +138,12 @@ async function initWebGPU() {
         minFilter: 'linear',
     });
 
-    cursorHitbox = device.createShaderModule({
-        code: cursorHitboxShaderCode
-    });
+    // cursorHitbox = device.createShaderModule({
+    //     code: cursorHitboxShaderCode
+    // });
 
     setCursorSize(CURSOR_MODES.LARGE);
 
-    hitboxBGL = device.createBindGroupLayout({
-        entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-            { binding: 4, visibility: GPUShaderStage.COMPUTE, externalTexture: {} },
-        ]
-    });
-    // Create a compute pipeline
-    hitboxPipeline = device.createComputePipeline({
-        layout: device.createPipelineLayout({ bindGroupLayouts: [hitboxBGL] }),
-        compute: {
-            module: device.createShaderModule({ code: cursorHitboxShaderCode }), // computeShaderCode contains the WGSL code above
-            entryPoint: 'main',
-        },
-    });
 }
 
 async function renderFrame() {
@@ -318,70 +175,19 @@ async function renderFrame() {
         if (window.spellCursor) {
             window.spellCursor.renderFrame(renderPassEncoder);
         }
+        if (window.hitboxShader) {
+            window.hitboxShader.renderFrame(renderPassEncoder);
+        }
     }
-
     renderPassEncoder.end();
     device.queue.submit([commandEncoder.finish()]);
-
     // await scanHitboxPixels(commandEncoder);
-}
-
-function updateTextAndCursor() {
-    return new Promise((resolve, reject) => {
-        // console.time('dom_render');
-        const textContainer = document.getElementById('textContainer');
-        const latestLetterContainer = document.getElementById('latestLetterContainer');
-        textContainer.style.left = `${mouseXNormalized * 100}%`;
-        textContainer.style.top = `${20 + mouseYNormalized * 100}%`;
-        if (!cursorActive) {
-            if (window.userString !== previousString) {
-                const lastChar = window.userString.charAt(window.userString.length - 1);
-                latestLetterContainer.textContent = lastChar;
-
-                // Set position based on mouseXNormalized and mouseYNormalized
-                // Assuming these values are in percentage (0-100), you might need to adjust this calculation
-                latestLetterContainer.style.left = `${mouseXNormalized * 100}%`;
-                latestLetterContainer.style.top = `${mouseYNormalized * 100}%`;
-
-                latestLetterContainer.classList.add("blur-animation");
-
-                setTimeout(() => {
-                    latestLetterContainer.classList.remove("blur-animation");
-                }, 500);
-
-                setTimeout(() => {
-                    latestLetterContainer.textContent = "";
-                }, 1000); // 500ms (effect duration) + 500ms (additional delay) = 1000ms or 1 second
-
-                previousString = window.userString;
-            }
-
-            textContainer.textContent = window.userString;
-            textContainer.style.color = 'white';
-
-            if (wordCompleted) {
-                textContainer.classList.add("flash-animation");
-
-                setTimeout(() => {
-                    textContainer.classList.remove("flash-animation");
-                }, 500);
-                wordCompleted = false;
-            }
-
-        } else {
-            window.userString = "";
-            textContainer.textContent = "";
-            latestLetterContainer.textContent = ""; // Clear the latest letter when cursor is active
-        }
-        // console.timeEnd('dom_render');
-        resolve();
-    });
 }
 
 async function renderLoop() {
     renderLoopCount++;
     updateFPS();
-    updateTextAndCursor();
+    currentGame.updateTextAndCursor();
     const currentTime = performance.now();
     const elapsedTime = (currentTime - startTime) / 1000.0;  // Convert to seconds
     // Update the uniform buffer with the new time value
@@ -444,7 +250,6 @@ async function scanHitboxPixels(commandEncoder) {
     computePassEncoder.dispatchWorkgroups(8, 8, 1);
     // computePassEncoder.dispatchWorkgroups(1,1,1);
     computePassEncoder.end();
-
     commandEncoder.copyBufferToBuffer(
         hitboxOutputBuffer,
         0,
@@ -507,8 +312,6 @@ function updateHitboxBindGroup() {
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
     });
 }
-let hitboxBufferSize;
-let stagingBuffer;
 
 function videoNeedsUpdate(video, videoType) {
     if (lastVideoFrameTime[videoType] !== video?.currentTime && video.readyState >= 2) {
@@ -518,134 +321,20 @@ function videoNeedsUpdate(video, videoType) {
     return false;
 }
 
-let mainVideo = null;
-
-let renderLoopCount = 0;
-const startTime = performance.now();
-
 async function playOnInteraction() {
     document.removeEventListener('click', playOnInteraction);
-
-    // you can customize the options of the main bind group
-    const gpuOptions = {
+    const gpuDefinitions = {
+        cursorVariables,
         device,
-        sampler: linearSampler,
-        constants: cursorConstants,
-        vertexConstants: vertexConstantsBuffer,
-    }
-    const webmPaths = extractWebmPaths(playgraph);
-    const videoPlayer = new VideoPlayer(webmPaths, mainNextVideoStrategy, false);
-    const mainBehavior = new DefaultShaderBehavior([videoPlayer]);
-    window.mainInteractiveVideo = new InteractiveVideo(gpuOptions, videoPlayer, mainBehavior);
-
-    const cursorGpuOptions = {
-        device,
+        canvas,
         context,
         sampler: linearSampler,
         hitboxBGL,
         constants: cursorConstants,
         vertexConstants: vertexConstantsBuffer,
         mousePositionBuffer
-    }
-    // const cursorPlaygraph = window.Playgraph.getPlaygraph('one').cursor;
-    const cursorVocabulary = {
-        '_masks': [
-            '/main/stretch2_3l_idle_mask.webm',
-            '/main/stretch1_3look_idle_mask.webm',
-        ],
-        'blank': {
-            'blank': { entry: '/main/blank.webm', idle: '/main/blank.webm', next: 'blank' },
-        },
-        'open': {
-            'o': { entry: '/main/o2.webm', idle: '/main/o2_idle.webm', next: 'op' },
-            'op': { entry: '/main/op4.webm', idle: '/main/op_idle.webm', next: 'ope' },
-            'ope': { entry: '/main/ope4.webm', idle: '/main/ope5_idle.webm', next: 'open' },
-            'open': { entry: '/main/open_4.webm', idle: '/main/open_idle.webm', next: 'open' },
-        },
-        'look': {
-            'l': { entry: '/main/3l.webm', idle: '/main/stretch2_3l_idle.webm', next: 'lo' },
-            'lo': { entry: '/main/3lo.webm', idle: '/main/stretch_3lo_idle.webm', next: 'loo' },
-            'loo': { entry: '/main/3loo.webm', idle: '/main/3loo_idle.webm', next: 'look' },
-            'look': { entry: '/main/3look.webm', idle: '/main/stretch1_3look_idle.webm', next: 'look' },
-        }
     };
-    const cursorPlan = {
-        main: getNextCursorVideo,
-        mask: getNextCursorMaskVideo
-    };
-    window.spellCursor = new SpellCursor(cursorVocabulary, cursorPlan, cursorGpuOptions, defaultCursorEventHandlers);
-    // Create the default cursor using the cursor plugin class
-    window.spellCursor.currentNodeIndex = 0;
-    renderLoop();
-    await new Promise(r => setTimeout(r, 200));
-    await window.mainInteractiveVideo.start('');
-    await window.spellCursor.start('/main/blank.webm');
-}
-
-function getNextCursorMaskVideo(currentVideo, playgraph, userInput) {
-    console.log('getNextCursorMaskVideo', currentVideo.src, userInput);
-    const nextUserInput = userInputQueue.shift() || '';
-    // if we're just staying in blank mode
-    if (this.cursorState !== 'blank') {
-        return '/main/stretch2_3l_idle_mask.webm';
-    }
-    return '/main/blank.webm';
-}
-
-function getNextCursorVideo(currentVideo, playgraph, userInput) {
-    const nextUserInput = userInputQueue.shift() || '';
-    // if we're just staying in blank mode
-    if (this.cursorState === 'blank' && nextUserInput === '') {
-        return '/main/blank.webm';
-    }
-    const vocabularyWord = this.findVocabularyWord(this.cursorState);
-    const vocabulary = this.cursorVocabulary[vocabularyWord];
-    let nextFragment = vocabulary[this.cursorState];
-    if (!nextFragment) {
-        alert('error no next fragment for ', this.cursorState);
-        return '/main/blank.webm';
-    }
-    const nextState = nextUserInput !== '' ? nextUserInput : this.cursorState;
-    if (nextState === this.cursorState) {
-        return nextFragment.idle;
-    }
-    if (nextState !== this.cursorState) {
-        if (nextState === 'l') {
-            this.switchToMaskCursor();
-        }
-        this.cursorState = nextState;
-        return vocabulary[nextFragment.next].entry;
-    }
-
-    return '/main/blank.webm';
-}
-
-function mainNextVideoStrategy(currentVideo) {
-    // if (window.mainState === 'intro') {
-    //     if (window.userInput === "side") {
-    //         window.mainState = 'side';
-    //         return '/main/side.webm';
-    //     }
-    //     return '/main/front_forward_idle.webm';
-    // }
-    window.mainState = 'side';
-    return '/main/side_idle.webm';
-    // if (window.mainState === 'side') {
-    //     if (window.userInput === 'opened_lantern') {
-    //         window.mainState = 'opened_lantern';
-    //         return '/main/opened_lantern.webm';
-    //     }
-    //     if (this.currentNodeIndex === this.playgraph.nodes.findIndex(node => node.id === 'side_idle')) {
-    //         this.currentNodeIndex = this.playgraph.nodes.findIndex(node => node.id === 'side_idle_reverse'); 
-    //         return '/main/side_idle_reverse.webm';
-    //     } 
-    //     this.currentNodeIndex = this.playgraph.nodes.findIndex(node => node.id === 'side_idle'); 
-    //     return '/main/side_idle.webm';
-    // }
-    if (window.mainState === 'opened_lantern') {
-        this.currentNodeIndex = this.playgraph.nodes.findIndex(node => node.id === 'opened_lantern_idle');
-        return '/main/opened_lantern_idle.webm';
-    }
+    currentGame.start(window, gpuDefinitions, renderLoop);
 }
 
 function defaultNextVideoStrategy(currentVideo) {
@@ -661,7 +350,7 @@ function defaultNextVideoStrategy(currentVideo) {
         nextEdgeIndex = currentEdgeIndex; // Default to the current video (looping behavior)
 
         // Select the next edge based on the global userInput variable
-        const nextEdges = currentNode.edges.filter(edge => edge.tags.includes(window.userInput));
+        const nextEdges = currentNode.edges.filter(edge => edge.tags.includes(userInput));
         if (nextEdges.length > 0) {
             nextEdgeIndex = currentNode.edges.indexOf(nextEdges[0]);
         }
@@ -677,7 +366,6 @@ function defaultNextVideoStrategy(currentVideo) {
 
     return nextVideoPath;
 }
-;
 
 // initialize and wait for the user to interact with the page
 window.onload = async function () {
@@ -689,42 +377,11 @@ window.onload = async function () {
     overlayContext = overlayCanvas.getContext("2d");
     await initWebGPU();
 
-    let isLetterAnimating = false;
-
     window.addEventListener("keyup", (event) => {
-        if (!window.spellCursor) return;
-        if (isLetterAnimating) return;  // If a letter is animating, ignore other keypresses
-        // any key to exit a text state
-        if (window.spellCursor.cursorState === 'look_at_handle_idle') {
-            userInputQueue = ['look_at_handle_exit'];
-            return;
-        }
-        if (event.key === "ArrowRight") {
-            window.mainState = "side";
-        } else if (event.key === "Backspace" || event.key === "Escape") {
-            window.spellCursor.cursorState = "blank";
-            window.userString = "";
-            userInputQueue = [];  // Clear the queue
-        } else if (/^[a-zA-Z]$/.test(event.key)) {
-            // For other input conditions
-            window.userString += event.key.toLowerCase();
-            // differentiate between 'l' for look vs 'l' for light
-            if (window.mainState === 'side') {
-                // if (window.userString === 'l') {
-                //     window.userString = 'light_l';
-                // }
-            }
-            userInputQueue.push(window.userString);
-            isLetterAnimating = true;  // Set the flag
-
-            // Reset the flag after a delay (corresponding to the duration of the animation + the half-second delay)
-            setTimeout(() => {
-                isLetterAnimating = false;
-            }, textFlashAnimationDuration + 500);
-        }
+        currentGame.handleEvent(window, 'keyup', event);
     });
 
-    playgraph = window.Playgraph.getPlaygraph('one').main;
+    // playgraph = window.Playgraph.getPlaygraph('one').main;
 
     // Add listeners for various user interactions
     document.addEventListener('click', playOnInteraction);

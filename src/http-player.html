@@ -2,25 +2,21 @@
 <html>
 
 <head>
-    <script data-trunk src="./src/player.js"> </script>
-    <link data-trunk rel="css" href="./src/styles.css">
-    <link data-trunk rel="copy-dir" href="./src/main"> </link>
-    <link data-trunk rel="copy-dir" href="./src/game1"> </link>
-    <title>GAME1</title>
+    <title>HTTP GAME3</title>
+    <link rel="stylesheet" href="styles.css"/>
 </head>
 
 <body>
     <div id="fpsCounter">FPS: 0</div>
-
     <div id="videoNameDisplay">Video Name: <span id="currentVideoName">Loading...</span></div>
     <div id="userInputDisplay">Loading...</div>
     <div id="textContainer"></div>
     <div id="latestLetterContainer"></div>
-    <canvas id="overlayCanvas" width="1920" height="1080" style="position: absolute;"></canvas>
-    <canvas id="webgpuCanvas" width="1920" height="1080" style="position: absolute;"></canvas>
+    <canvas id="overlayCanvas" width="1920" height="1080" style="display: none;"></canvas>
+    <canvas id="webgpuCanvas" width="1920" height="1080" style="display: none;"></canvas>
     <div class="container">
         <input id="userKeyboardElement" class="centered-input" type="text" placeholder="Type here to set a cursor...">
     </div>
+    <script src="player.js"> </script>
 </body>
-
 </html>

@@ -1,6 +1,6 @@
 import { CursorMaskShaderBehavior, CursorNoMaskShaderBehavior } from './SpellCursorBehaviors.js';
-import InteractiveVideo from './InteractiveVideo.js';
-import VideoPlayer from './VideoPlayer.js';
+import InteractiveVideo from '../InteractiveVideo.js';
+import VideoPlayer from '../VideoPlayer.js';
 
 function extractWebmPathsFromVocabulary(cursorVocabulary) {
     let webmPaths = new Set(); // Using a Set to avoid duplicates

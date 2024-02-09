@@ -34,6 +34,13 @@ class InteractiveVideo {
     this.shaderBehavior.getPipeline(this.webgpu);
     this.shaderBehavior.getBindGroupLayout(this.webgpu);
     this.shaderBehavior.renderBindGroup(textures, renderPassEncoder, this.webgpu);
+    if (this.shaderBehavior.updateHitboxBindGroup) {
+      this.shaderBehavior.updateHitboxBindGroup(renderPassEncoder);
+    }
+  }
+
+  getHitbox(renderPassEncoder) {
+    this.shaderBehavior.scanHitboxPixels(renderPassEncoder);
   }
 
   setShaderBehavior(shaderBehavior) {

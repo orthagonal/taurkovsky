@@ -1,0 +1,15 @@
+{
+  "dependencies": {
+    "@tauri-apps/api": "^1.5.1",
+    "@tauri-apps/cli": "^1.5.6",
+    "esbuild": "^0.19.12",
+    "esbuild-loader": "^4.0.3",
+    "esbuild-windows-32": "^0.15.18"
+  },
+  "scripts": {
+    "dev": "nodemon --exec ./build.sh --ext js --ignore src/player.js"
+  },
+  "devDependencies": {
+    "webpack-cli": "^5.1.4"
+  }
+}

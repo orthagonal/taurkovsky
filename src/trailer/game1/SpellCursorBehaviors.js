@@ -2,7 +2,7 @@
     these are cursor behaviors that handle typing words
     and forming into a shape that can interact with a mask layer
 */
-import { ShaderBehavior } from './ShaderBehavior.js';
+import { ShaderBehavior } from '../ShaderBehavior.js';
 
 
 // vertexes on which the cursor is rendered,
@@ -94,7 +94,7 @@ const maskShaderCode = /* wgsl */`
                 var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
                 var thresholdDistance = 0.05;
                 if (distanceFromCenter <= thresholdDistance) {
-                    var bias = 0.4; // Adjust as needed to bias more or less in favor of smallTexture
+                    var bias = 0.9; // Adjust as needed to bias more or less in favor of smallTexture
                     var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
                     var beta = 1.0 - alpha; // Inverse alpha value for blending
                     // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 

@@ -5,14 +5,37 @@ function getVideoSrc(videoPath) {
     // Running in Tauri (production), use a custom protocol or Tauri API
     // return `stream:/${videoPath}`;
     return videoPath[0] === '/' ? `https://stream.localhost${videoPath}` : `https://stream.localhost/${videoPath}`;
-  } else {
-    // Running in development, use local server URL
+  } 
+  if (videoPath.startsWith('http')) {
     return videoPath;
   }
+  // Running in development, use local server URL
+  console.log('videoPath', videoPath);
+  // return `http://127.0.0.1:1420/trailer/${videoPath}`;
+  return `http://127.0.0.1:1420/trailer/${videoPath}`;
+}
+
+function extractWebmPathsFromObject(playgraph) {
+  // get all values that are strings and end with .webm
+  // will append a '/' to the beginning of the path if it's missing
+  const string = JSON.stringify(playgraph);
+  // use regex to get .webm files from the json string
+  // const regex = /"game1\/clips\/see-\d+_to_\d+-graph\.mov\.webm"/g;
+  const regex = new RegExp(`([^"]*\.webm)`, 'g');
+  const webmPaths = string.match(regex);
+  return webmPaths;
+  // return Object.values(playgraph).reduce((acc, val) => {
+  //   if (typeof val === 'string' && val.endsWith('.webm')) {
+  //     acc.push(val);
+  //     return acc;
+  //   }
+  //   acc.push(...extractWebmPathsFromObject(val));
+  //   return acc;
+  // }, []);
 }
 
 // New method to extract all .webm paths from the playgraph
-function extractWebmPaths(playgraph) {
+function extractWebmPathsPlaygraphForm(playgraph) {
   let webmPaths = [];
   // Assuming playgraph structure has nodes and each node has edges
   if (playgraph && playgraph.nodes) {
@@ -30,4 +53,5 @@ function extractWebmPaths(playgraph) {
   return webmPaths;
 }
 
-export { getVideoSrc, extractWebmPaths };
+
+export { getVideoSrc, extractWebmPathsFromObject, extractWebmPathsPlaygraphForm }; 

@@ -1,38 +1,9 @@
-// Base class for shader behaviors
-// getsthe most-recent video texture(s) from the video player(s)
-// used by your shader and draws the shader
-// you can override this class to implement your own shader behavior
-// and there is a default behavior that simply renders one video texture to the screen
-class ShaderBehavior {
-  constructor(videoPlayers) {
-    this.videoPlayers = videoPlayers;
-    this._pipeline = null; // Cache fo r the pipeline
-    this._bindGroupLayout = null; // Cache for the fragment shader's bind group layout
-    this._vertexBindGroup = null; // Cache for the vertex shader's bind group
-  }
+/*
+  allows you to distort the video using anchors
+*/
+const { DefaultShaderBehavior } = require('./ShaderBehavior.js');
 
-  getPipeline(webgpu) {
-    throw new Error("getPipeline method not implemented");
-  }
-
-  getBindGroupLayout(webgpu) {
-    throw new Error("getBindGroupLayout method not implemented");
-  }
-
-  getVideoTextures(device) {
-    throw new Error("getVideoTextures method not implemented");
-  }
-
-  renderBindGroup(textureList, renderPassEncoder, webgpu) {
-    throw new Error("renderBindGroup method not implemented");
-  }
-}
-
-// Default shader behavior implementation
-// will render one video texture to the screen
-// with some basic effects
-
-const vertexShaderCode = /* wgsl */`
+const distortionVertexShaderCode = /* wgsl */`
 struct VertexConstants {
     // Shudder effect: you can add random displacement based on time
     shudderAmount: f32,
@@ -47,7 +18,12 @@ struct VertexOutput {
     @location(0) fragUV : vec2<f32>,
 }
 
+struct AnchorPoints {
+  points: array<vec4<f32>, 8>
+}
+
 @group(1) @binding(0) var<uniform> vertexConstants: VertexConstants;
+@group(1) @binding(1) var<uniform> anchors: AnchorPoints;
 
 @vertex
 fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
@@ -64,6 +40,22 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         vec2(1.0, 0.0),  // top-right (y-coordinate flipped)
         vec2(1.0, 1.0)   // bottom-right (y-coordinate flipped)
     );
+
+    var nearestDistance = distance(pos[vertexIndex], anchors.points[0].xy);
+    var nearestAnchor = anchors.points[0].xy;
+
+    // Find the nearest anchor point
+    for (var i = 0; i < 8; i++) {
+        let dist = distance(pos[vertexIndex], anchors.points[i].xy);
+        if (dist < nearestDistance) {
+            nearestDistance = dist;
+            nearestAnchor = anchors.points[i].xy;
+        }
+    }
+    // calculate the influence that anchor point has on the vertex
+    let influence = 1.0 - nearestDistance; // This is a basic influence calculation
+    pos[vertexIndex] = mix(pos[vertexIndex], nearestAnchor, influence);
+
 
     var randomDisplacement = vec2<f32>(
         vertexConstants.shudderAmount * (sin(vertexConstants.time * 25.0) - 0.5), 
@@ -82,7 +74,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 }
 `
 
-const fragmentShaderCode = /* wgsl */`
+const distortionFragmentShaderCode = /* wgsl */`
   @group(0) @binding(0) var mySampler: sampler;
   @group(0) @binding(1) var myTexture: texture_external;
 
@@ -92,33 +84,51 @@ const fragmentShaderCode = /* wgsl */`
   }
 `;
 
-/*
-These are the webgpu options you can pass to defaultShader: {
-  device: GPUDevice,
-  sampler: GPUTextureSampler,
-  constants: Float32Array, (this will contain the time, shudderAmount, rippleStrength, rippleFrequency)
- }
-*/
+class DistortionShaderBehavior extends DefaultShaderBehavior {
+  constructor(videoPlayers) {
+    super(videoPlayers);
+    this.defaultAnchors = new Float32Array([
+      // Default anchor points values (x, y) pairs, each is padded with 2 empty points because of alignment issues
+      // Top-left, 
+      -1.0, 1.0, 0.0, 0.0,
+      // top-right, 
+      1.0, 1.0, 0.0, 0.0,
+      // bottom-right, 
+      1.0, -1.0, 0.0, 0.0,
+      // bottom-left, 
+      -1.0, -1.0, 0.0, 0.0,
+      // top-center, 
+      0.0, 1.0, 0.0, 0.0,
+      // right-center, 
+      1.0, 0.0, 0.0, 0.0,
+      // bottom-center, 
+      0.0, -1.0, 0.0, 0.0,
+      // left-center
+      -1.0, 0.0, 0.0, 0.0
+    ]);
+    this.anchorBuffer = null;
+  }
 
-class DefaultShaderBehavior extends ShaderBehavior {
-  // pipeline only needs to be created once
   getPipeline(webgpu) {
     if (!this._pipeline) {
+      this.updateAnchorBuffer(webgpu);
       // Create and return the default pipeline configuration
       // use the two shaders defined above:
-      const vertexModule = webgpu.device.createShaderModule({ code: vertexShaderCode });
-      const fragmentModule = webgpu.device.createShaderModule({ code: fragmentShaderCode });
+      const vertexModule = webgpu.device.createShaderModule({ code: distortionVertexShaderCode });
+      const fragmentModule = webgpu.device.createShaderModule({ code: distortionFragmentShaderCode });
 
       const vertexBGL = webgpu.device.createBindGroupLayout({
         entries: [
-          { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }
+          { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+          { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }
         ]
       });
 
       this._vertexBindGroup = webgpu.device.createBindGroup({
         layout: vertexBGL,
         entries: [
-          { binding: 0, resource: { buffer: webgpu.vertexConstants } }
+          { binding: 0, resource: { buffer: webgpu.vertexConstants } },
+          { binding: 1, resource: { buffer: this.anchorBuffer } }
         ]
       });
 
@@ -156,32 +166,34 @@ class DefaultShaderBehavior extends ShaderBehavior {
     return this._pipeline;
   }
 
+  updateAnchorBuffer(webgpu, anchors = this.defaultAnchors) {
+    if (!this.anchorBuffer || this.anchorBuffer.size < anchors.byteLength) {
+      this.anchorBuffer = webgpu.device.createBuffer({
+        size: anchors.byteLength,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+    }
+    webgpu.device.queue.writeBuffer(this.anchorBuffer, 0, anchors.buffer, anchors.byteOffset, anchors.byteLength);
+  }
+
   getBindGroupLayout(webgpu) {
-    // bind group layout only needs to be created once
     if (!this._bindGroupLayout) {
-      // Create and return the default bind group layout
       this._bindGroupLayout = webgpu.device.createBindGroupLayout({
         entries: [
+          // Entry for the sampler used in the fragment shader
           { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+          // Entry for the external texture used in the fragment shader
           { binding: 1, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
+          // Entry for the uniform buffer used in both vertex and fragment shaders
           { binding: 2, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
-        ]
+        ],
       });
     }
     return this._bindGroupLayout;
   }
 
-  getVideoTextures(device) {
-    // Retrieve the texture from the first video player
-    if (this.videoPlayers.length > 0 && this.videoPlayers[0]) {
-      const currentVideo = this.videoPlayers[0].getCurrentFrame(device);
-      return currentVideo ? [currentVideo] : [null];
-    }
-    return [null];
-  }
-
-  renderBindGroup(textureList, renderPassEncoder, webgpu) {
-    // Render the main video
+  renderBindGroup(textureList, renderPassEncoder, webgpu, anchors) {
+    this.updateAnchorBuffer(webgpu, anchors);
     const mainExternalTexture = textureList[0];
     const bindGroup = webgpu.device.createBindGroup({
       layout: this.getBindGroupLayout(webgpu), // Assuming this is the correct layout
@@ -196,6 +208,6 @@ class DefaultShaderBehavior extends ShaderBehavior {
     renderPassEncoder.setBindGroup(1, this._vertexBindGroup);
     renderPassEncoder.draw(4, 1, 0, 0);
   }
-}
+};
 
-export { ShaderBehavior, DefaultShaderBehavior };
+export { DistortionShaderBehavior }

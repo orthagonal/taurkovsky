@@ -1,5 +1,6 @@
+
 [build]
-target = "./public/player.html"
+target = "src/player.html"
 
 [watch]
 watch = [
@@ -7,20 +8,36 @@ watch = [
   "./src/trailer/InteractiveVideo.js",
   "./src/trailer/VideoPlayer.js",
   "./src/trailer/ShaderBehavior.js",
-  "./src/trailer/SpellCursorBehaviors.js",
-  "./src/trailer/SpellCursor.js",
+  "./src/trailer/game1/module.js",
+  "./src/trailer/game1/SpellCursorBehaviors.js",
+  "./src/trailer/game1/SpellCursor.js",
   "./src/trailer/playgraph.js",
   "./src/trailer/player.html",
   "./src/trailer/main",
+  "./src/trailer/DistortionShaderBehavior.js"
 ]
-ignore = ["./src-tauri", "./public"]
+ignore = ["./src-tauri"]
 
 [serve]
 address = "127.0.0.1"
 port = 1420
 open = true
 
-[[hooks]]
-stage = "pre_build"
-command = "sh"
-command_arguments = ["-c", "./build.sh"]
+[clean]
+paths = ["./dist"]
+
+# [[hooks]]
+# stage = "pre_build"
+# command = "./build.sh"
+
+# [[hooks]]
+# stage = "build"
+# command = "./build.sh"
+
+# [[hooks]]
+# stage = "post_build"
+# command = "sh"
+# command_arguments = ["-c", "./build.sh"]
+
+
+
