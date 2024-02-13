@@ -23,46 +23,6 @@ let mousePositionBuffer;
 let mainBehavior;
 
 
-const maxAnchors = new Float32Array([
-  // Default anchor points values (x, y) pairs
-  // Top-left, 
-  1.0, 1.0, 0.0, 0.0,
-  // top-right, 
-  1.0, 1.0, 0.0, 0.0,
-  // bottom-right, 
-  1.0, -1.0, 0.0, 0.0,
-  // bottom-left, 
-  -1.0, -1.0, 0.0, 0.0,
-  // top-center, 
-  0.0, 1.0, 0.0, 0.0,
-  // right-center, 
-  1.0, 0.0, 0.0, 0.0,
-  // bottom-center, 
-  0.0, -1.0, 0.0, 0.0,
-  // left-center
-  -1.0, 0.0, 0.0, 0.0
-]);
-
-const minAnchors = new Float32Array([
-  // Default anchor points values (x, y) pairs
-  // Top-left, 
-  -1.0, 1.0, 0.0, 0.0,
-  // top-right, 
-  1.0, 1.0, 0.0, 0.0,
-  // bottom-right, 
-  1.0, -1.0, 0.0, 0.0,
-  // bottom-left, 
-  -1.0, -1.0, 0.0, 0.0,
-  // top-center, 
-  0.0, 1.0, 0.0, 0.0,
-  // right-center, 
-  1.0, 0.0, 0.0, 0.0,
-  // bottom-center, 
-  0.0, -1.0, 0.0, 0.0,
-  // left-center
-  -1.0, 0.0, 0.0, 0.0
-]);
-
 moduleState = {
   started: false,
   // the current 'scene' and playgraph we are in 
@@ -74,8 +34,6 @@ moduleState = {
   mainUserInputQueue: [""],
   cursorUserInputQueue: [""],
   distortionAnchors: {
-    maxAnchors,
-    minAnchors
   },
   // cumulative string the user has typed
   userString: "",
@@ -319,24 +277,9 @@ function distortAnchors() {
   if (moduleState.resetAnchors) {
     moduleState.resetAnchors = false;
     mainBehavior.resetWeights();
-  } else {
-    mainBehavior.updateTween(window.mainInteractiveVideo.webgpu, moduleState.time);
   }
   moduleState.time += moduleState.timeIncrement;
 }
-
-// modes for ACT MORE LIKE A GAME - ACT MORE LIKE A MOVIE 
-// PIN IT TO CAUSE NEXT TRANSITION
-// THIS GIVES YOU SOME ERROR ROOM ON THE VIDEOS
-// - show pins
-// - show targets
-// - activate drag-drop for the pins
-// - detect when the pin is dropped on the target, lock it
-// - detect when all pins are dropped and do the transition
-
-
-
-
 
 // i need to make it so that only one place advances the game state
 // and the other handles getting the correct video
@@ -370,6 +313,10 @@ const handleEvent = (window, eventName, event) => {
     }, textFlashAnimationDuration + 500);
   }
 };
+
+
+
+
 
 module.exports = {
   start,

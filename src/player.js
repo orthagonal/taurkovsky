@@ -373,7 +373,7 @@ struct VertexOutput {
 
 struct AnchorPoints {
   points: array<vec4<f32>, 8>, // position of each anchor point
-  weights: vec4<f32> // weight of each anchor point
+  // weights: vec4<f32> // weight of each anchor point
 }
 
 @group(1) @binding(0) var<uniform> vertexConstants: VertexConstants;
@@ -395,21 +395,21 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         vec2(1.0, 1.0)   // bottom-right (y-coordinate flipped)
     );
 
-    // calculate combined influences from all anchor points with weighting
-    var totalWeight = 0.0;
-    var influenceWeightedPosition = vec2<f32>(0.0, 0.0);  // Reset before accumulating 
-    
+    var closestAnchorIndex = 0;
+    var minDistance = 10000.0; // Large initial distance
+
     for (var i = 0; i < 8; i++) {
         let dist = distance(pos[vertexIndex], anchors.points[i].xy);
-        var influence = 1.0 - dist; 
-        influence = 0.55 + influence * 0.05; // Maps an '1.0' influence to '1.0', a '0.0' influence to '0.95' 
-        totalWeight += anchors.weights.x;//i].x; // Accumulate total weight 
-        influenceWeightedPosition += anchors.points[i].xy * influence * anchors.weights.x;//[i].x;
+        if (dist < minDistance) {
+            minDistance = dist;
+            closestAnchorIndex = i;
+        }
     }
 
-    // Calculate final position using weights of influencing anchors 
-    influenceWeightedPosition /= totalWeight; 
-    pos[vertexIndex] = mix(pos[vertexIndex], influenceWeightedPosition, 0.5);  // Adjust mix factor as desired 
+    // Directly use the closest anchor's offset, clamp between -1 and 1:
+    pos[vertexIndex] = anchors.points[closestAnchorIndex].xy * 2.00 - 1.0;
+    // pos[vertexIndex].x = clamp(pos[vertexIndex].x, -1.0, 1.0);
+    // pos[vertexIndex].y = clamp(pos[vertexIndex].y, -1.0, 1.0);
 
     var randomDisplacement = vec2<f32>(
         vertexConstants.shudderAmount * (sin(vertexConstants.time * 25.0) - 0.5), 
@@ -441,84 +441,44 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         constructor(videoPlayers) {
           super(videoPlayers);
           this.currentAnchors = new Float32Array([
-            // Default anchor points values (x, y) pairs, each is padded with 2 empty points because of alignment issues
+            // Default anchor points values (x, y) pairs
             // Top-left, 
-            -1,
+            0,
             1,
-            0,
-            0,
             // top-right, 
             1,
             1,
-            0,
-            0,
             // bottom-right, 
             1,
-            -1,
-            0,
             0,
             // bottom-left, 
-            -1,
-            -1,
             0,
             0,
             // top-center, 
-            0,
+            0.5,
             1,
-            0,
-            0,
             // right-center, 
             1,
-            0,
-            0,
-            0,
+            0.5,
             // bottom-center, 
-            0,
-            -1,
-            0,
+            0.5,
             0,
             // left-center
-            -1,
             0,
-            0,
-            0
+            0.5
           ]);
           this.anchorBuffer = null;
           this.anchorWeights = new Float32Array(8).fill(1);
-          this.targetWeights = null;
-          this.tweenDuration = 1;
-          this.tweenStartTime = 0;
-          this.tweening = false;
         }
         resetWeights() {
           this.anchorWeights.fill(1);
-          this.tweening = false;
         }
         setAnchorWeights(newWeights) {
           if (newWeights.length !== 8) {
             console.warn("setAnchorWeights requires an array of length 8.");
             return;
           }
-          this.targetWeights = newWeights.slice();
-          this.tweenStartTime = performance.now();
-          this.tweening = true;
-        }
-        // Call this in your main render loop 
-        updateTween(webgpu, time) {
-          if (this.tweening) {
-            const elapsed = (time - this.tweenStartTime) / 1e3;
-            let progress = elapsed / this.tweenDuration;
-            if (progress >= 1) {
-              this.tweening = false;
-              this.anchorWeights = this.targetWeights.slice();
-              this.targetWeights = null;
-            } else {
-              for (let i = 0; i < 8; i++) {
-                this.anchorWeights[i] = this.anchorWeights[i] * (1 - progress) + this.targetWeights[i] * progress;
-              }
-            }
-            this.updateAnchorBuffer(webgpu);
-          }
+          this.currentAnchors.set(newWeights);
         }
         getPipeline(webgpu) {
           if (!this._pipeline) {
@@ -572,7 +532,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
           return this._pipeline;
         }
         updateAnchorBuffer(webgpu, anchors = this.currentAnchors) {
-          const anchorsAndWeights = new Float32Array([...anchors, ...this.anchorWeights]);
+          const anchorsAndWeights = new Float32Array([...anchors, ...this.anchorWeights, 0, 0, 0, 0, 0, 0, 0, 0]);
           if (!this.anchorBuffer || this.anchorBuffer.size < anchorsAndWeights.byteLength) {
             this.anchorBuffer = webgpu.device.createBuffer({
               size: anchorsAndWeights.byteLength,
@@ -614,6 +574,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
           renderPassEncoder.draw(4, 1, 0, 0);
         }
       };
+      alert("update");
     }
   });
 
@@ -1120,16 +1081,6 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
     }
   }
   function distortAnchors(distortionAmount, moduleState2) {
-    const indices = [
-      [16, 17],
-      [20, 21],
-      [24, 25],
-      [28, 29]
-    ];
-    for (let i = 0; i < indices.length; i++) {
-      moduleState2.distortionAnchors.currentAnchors[indices[i][0]] = distortionAmount;
-      moduleState2.distortionAnchors.currentAnchors[indices[i][1]] = distortionAmount;
-    }
   }
   function see_intro(currentVideo, moduleState2, playgraph2) {
     if (moduleState2.playgraphState === "blank") {
@@ -1391,92 +1342,6 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
       var device2;
       var mousePositionBuffer2;
       var mainBehavior;
-      var maxAnchors = new Float32Array([
-        // Default anchor points values (x, y) pairs
-        // Top-left, 
-        1,
-        1,
-        0,
-        0,
-        // top-right, 
-        1,
-        1,
-        0,
-        0,
-        // bottom-right, 
-        1,
-        -1,
-        0,
-        0,
-        // bottom-left, 
-        -1,
-        -1,
-        0,
-        0,
-        // top-center, 
-        0,
-        1,
-        0,
-        0,
-        // right-center, 
-        1,
-        0,
-        0,
-        0,
-        // bottom-center, 
-        0,
-        -1,
-        0,
-        0,
-        // left-center
-        -1,
-        0,
-        0,
-        0
-      ]);
-      var minAnchors = new Float32Array([
-        // Default anchor points values (x, y) pairs
-        // Top-left, 
-        -1,
-        1,
-        0,
-        0,
-        // top-right, 
-        1,
-        1,
-        0,
-        0,
-        // bottom-right, 
-        1,
-        -1,
-        0,
-        0,
-        // bottom-left, 
-        -1,
-        -1,
-        0,
-        0,
-        // top-center, 
-        0,
-        1,
-        0,
-        0,
-        // right-center, 
-        1,
-        0,
-        0,
-        0,
-        // bottom-center, 
-        0,
-        -1,
-        0,
-        0,
-        // left-center
-        -1,
-        0,
-        0,
-        0
-      ]);
       moduleState = {
         started: false,
         // the current 'scene' and playgraph we are in 
@@ -1488,10 +1353,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         playgraphState: "blank",
         mainUserInputQueue: [""],
         cursorUserInputQueue: [""],
-        distortionAnchors: {
-          maxAnchors,
-          minAnchors
-        },
+        distortionAnchors: {},
         // cumulative string the user has typed
         userString: ""
       };
@@ -1700,8 +1562,6 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         if (moduleState.resetAnchors) {
           moduleState.resetAnchors = false;
           mainBehavior.resetWeights();
-        } else {
-          mainBehavior.updateTween(window.mainInteractiveVideo.webgpu, moduleState.time);
         }
         moduleState.time += moduleState.timeIncrement;
       }

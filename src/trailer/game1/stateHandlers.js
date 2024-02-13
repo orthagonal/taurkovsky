@@ -57,16 +57,16 @@ function mainVideoSwitcher(currentVideo, moduleState, playgraph) {
 }
 
 function distortAnchors(distortionAmount, moduleState) {
-  const indices = [
-    [16, 17],
-    [20, 21],
-    [24, 25],
-    [28, 29],
-  ];
-  for (let i = 0; i < indices.length; i++) {
-    moduleState.distortionAnchors.currentAnchors[indices[i][0]] = distortionAmount;
-    moduleState.distortionAnchors.currentAnchors[indices[i][1]] = distortionAmount;
-  }
+  // const indices = [
+  //   [16, 17],
+  //   [20, 21],
+  //   [24, 25],
+  //   [28, 29],
+  // ];
+  // for (let i = 0; i < indices.length; i++) {
+  //   moduleState.distortionAnchors.currentAnchors[indices[i][0]] = distortionAmount;
+  //   moduleState.distortionAnchors.currentAnchors[indices[i][1]] = distortionAmount;
+  // }
 }
 
 function see_intro(currentVideo, moduleState, playgraph) {
