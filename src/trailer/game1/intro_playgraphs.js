@@ -1,158 +1,139 @@
+// In your game object file at some point during initialization
 const eyePlaygraph = {
-  s: {
-    "65": {
-      "graph": [
-        "game1/clips/see-65_to_57-graph.webm",
-        "game1/clips/see-65_to_52-graph.webm",
-        "game1/clips/see-65_to_46-graph.webm",
-        "game1/clips/see-65_to_61-graph.webm"
-      ],
-      "sink": {
-        "123-sink": "game1/clips/see-65_to_123-sink.webm"
-      }
-    },
-    "61": {
-      "graph": [
-        "game1/clips/see-61_to_57-graph.webm",
-        "game1/clips/see-61_to_52-graph.webm",
-        "game1/clips/see-61_to_46-graph.webm",
-        "game1/clips/see-61_to_65-graph.webm"
-      ],
-      "sink": {
-
-      }
-    },
-    "57": {
-      "graph": [
-        "game1/clips/see-57_to_65-graph.webm",
-        "game1/clips/see-57_to_61-graph.webm",
-        "game1/clips/see-57_to_52-graph.webm",
-        "game1/clips/see-57_to_46-graph.webm"
-      ],
-      "sink": {
-
-      }
-    },
-    "52": {
-      "graph": [
-        "game1/clips/see-52_to_65-graph.webm",
-        "game1/clips/see-52_to_61-graph.webm",
-        "game1/clips/see-52_to_57-graph.webm",
-        "game1/clips/see-52_to_46-graph.webm"
-      ],
-      "sink": {
-
-      }
-    },
-    "46": {
-      "graph": [
-        "game1/clips/see-46_to_65-graph.webm",
-        "game1/clips/see-46_to_61-graph.webm",
-        "game1/clips/see-46_to_57-graph.webm",
-        "game1/clips/see-46_to_52-graph.webm"
-      ],
-      "sink": {
-
-      }
-    }
-  },
-  se: {
-    "125": {
-      "graph": [
-        "game1/clips/see-125_to_123-graph.webm",
-        "game1/clips/see-125_to_120-graph.webm",
-        "game1/clips/see-125_to_118-graph.webm"
-      ],
-      "sink": {
-        "164-sink": "game1/clips/see_125_to_164-sink.webm"
-      }
-    },
-    "123": {
-      "graph": [
-        "game1/clips/see-123_to_125-graph.webm",
-        "game1/clips/see-123_to_120-graph.webm",
-        "game1/clips/see-123_to_118-graph.webm"
-      ],
-      "sink": {
-      }
-    },
-    "120": {
-      "graph": [
-        "game1/clips/see-120_to_125-graph.webm",
-        "game1/clips/see-120_to_123-graph.webm",
-        "game1/clips/see-120_to_118-graph.webm"
-      ],
-      "sink": {
-
-      }
-    },
-    "118": {
-      "graph": [
-        "game1/clips/see-118_to_125-graph.webm",
-        "game1/clips/see-118_to_123-graph.webm",
-        "game1/clips/see-118_to_120-graph.webm"
-      ],
-      "sink": {
-
-      }
-    }
-  },
-
+  
   see: {
     "200": {
       "graph": [
-        "game1/clips/see-200_to_164-graph.webm"
+        "game1/clips/see-200_to_188-graph.webm",
+        "game1/clips/see-200_to_178-graph.webm",
+        "game1/clips/see-200_to_168-graph.webm"
       ],
       "sink": {
-        "200-sink": "game1/clips/see_200_to_lamp-sink.webm"
+        "lamp-sink": "game1/clips/see-200_to_lamp-sink.webm"
       }
     },
-    "186": {
+    "188": {
       "graph": [
-        "game1/clips/see-186_to_200-graph.webm",
-        "game1/clips/see-186_to_175-graph.webm",
-        "game1/clips/see-186_to_167-graph.webm",
-        "game1/clips/see-186_to_164-graph.webm"
-      ],
-      // todo: in 'sink' mode we should automatically pick 'sink' and it should contain
-      // a link to the nearest sink
-      "sink": {
-
-      }
-    },
-    "175": {
-      "graph": [
-        "game1/clips/see-175_to_200-graph.webm",
-        "game1/clips/see-175_to_186-graph.webm",
-        "game1/clips/see-175_to_167-graph.webm",
-        "game1/clips/see-175_to_164-graph.webm"
+        "game1/clips/see-188_to_200-graph.webm",
+        "game1/clips/see-188_to_178-graph.webm",
+        "game1/clips/see-188_to_168-graph.webm"
       ],
       "sink": {
 
       }
     },
-    "167": {
+    "178": {
       "graph": [
-        "game1/clips/see-167_to_200-graph.webm",
-        "game1/clips/see-167_to_186-graph.webm",
-        "game1/clips/see-167_to_175-graph.webm",
-        "game1/clips/see-167_to_164-graph.webm"
+        "game1/clips/see-178_to_200-graph.webm",
+        "game1/clips/see-178_to_188-graph.webm",
+        "game1/clips/see-178_to_168-graph.webm"
       ],
       "sink": {
 
       }
     },
-    "164": {
+    "168": {
       "graph": [
-        "game1/clips/see-164_to_200-graph.webm",
-        "game1/clips/see-164_to_186-graph.webm",
-        "game1/clips/see-164_to_175-graph.webm",
-        "game1/clips/see-164_to_167-graph.webm"
+        "game1/clips/see-168_to_200-graph.webm",
+        "game1/clips/see-168_to_188-graph.webm",
+        "game1/clips/see-168_to_178-graph.webm"
       ],
       "sink": {
 
       }
     },
+  },
+  se: {
+    "79": {
+      "graph": [
+        "game1/clips/see-79_to_73-graph.webm",
+        "game1/clips/see-79_to_67-graph.webm",
+        "game1/clips/see-79_to_62-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "73": {
+      "graph": [
+        "game1/clips/see-73_to_79-graph.webm",
+        "game1/clips/see-73_to_67-graph.webm",
+        "game1/clips/see-73_to_62-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "67": {
+      "graph": [
+        "game1/clips/see-67_to_79-graph.webm",
+        "game1/clips/see-67_to_73-graph.webm",
+        "game1/clips/see-67_to_62-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "62": {
+      "graph": [
+        "game1/clips/see-62_to_79-graph.webm",
+        "game1/clips/see-62_to_73-graph.webm",
+        "game1/clips/see-62_to_67-graph.webm"
+      ],
+      "sink": {
+        "168-sink": "game1/clips/see-62_to_168-sink.webm"
+      }
+    },
+  },
+  s: {
+    "21": {
+      "graph": [
+        "game1/clips/see-21_to_17-graph.webm",
+        "game1/clips/see-21_to_10-graph.webm",
+        "game1/clips/see-21_to_6-graph.webm"
+      ],
+      "sink": {
+        "62-sink": "game1/clips/see-21_to_62-sink.webm"
+      }
+    },
+    "17": {
+      "graph": [
+        "game1/clips/see-17_to_21-graph.webm",
+        "game1/clips/see-17_to_10-graph.webm",
+        "game1/clips/see-17_to_6-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "10": {
+      "graph": [
+        "game1/clips/see-10_to_21-graph.webm",
+        "game1/clips/see-10_to_17-graph.webm",
+        "game1/clips/see-10_to_6-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "6": {
+      "graph": [
+        "game1/clips/see-6_to_21-graph.webm",
+        "game1/clips/see-6_to_17-graph.webm",
+        "game1/clips/see-6_to_10-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "see": {
+      "graph": [
+
+      ],
+      "sink": {
+        "intro-sink": "game1/clips/see_intro-sink.webm"
+      }
+    }
   },
   lamp_intro: "game1/clips/lamp_intro_to_487-sink.webm",
   lamp: {
@@ -163,7 +144,6 @@ const eyePlaygraph = {
         "game1/clips/lamp-536_to_487-graph.webm"
       ],
       "sink": {
-
       }
     },
     "522": {
@@ -173,7 +153,6 @@ const eyePlaygraph = {
         "game1/clips/lamp-522_to_487-graph.webm"
       ],
       "sink": {
-
       }
     },
     "502": {
@@ -183,7 +162,6 @@ const eyePlaygraph = {
         "game1/clips/lamp-502_to_487-graph.webm"
       ],
       "sink": {
-
       }
     },
     "487": {
@@ -193,13 +171,13 @@ const eyePlaygraph = {
         "game1/clips/lamp-487_to_502-graph.webm"
       ],
       "sink": {
-
       }
     },
   }
-};
+}
 
-export default {
+module.exports = {
+  // export default {
   blank: 'main/blank.webm',
   intro: {
     eyePlaygraph,

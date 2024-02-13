@@ -19,7 +19,8 @@ struct VertexOutput {
 }
 
 struct AnchorPoints {
-  points: array<vec4<f32>, 8>
+  points: array<vec4<f32>, 8>, // position of each anchor point
+  weights: vec4<f32> // weight of each anchor point
 }
 
 @group(1) @binding(0) var<uniform> vertexConstants: VertexConstants;
@@ -41,21 +42,21 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         vec2(1.0, 1.0)   // bottom-right (y-coordinate flipped)
     );
 
-    var nearestDistance = distance(pos[vertexIndex], anchors.points[0].xy);
-    var nearestAnchor = anchors.points[0].xy;
-
-    // Find the nearest anchor point
+    // calculate combined influences from all anchor points with weighting
+    var totalWeight = 0.0;
+    var influenceWeightedPosition = vec2<f32>(0.0, 0.0);  // Reset before accumulating 
+    
     for (var i = 0; i < 8; i++) {
         let dist = distance(pos[vertexIndex], anchors.points[i].xy);
-        if (dist < nearestDistance) {
-            nearestDistance = dist;
-            nearestAnchor = anchors.points[i].xy;
-        }
+        var influence = 1.0 - dist; 
+        influence = 0.55 + influence * 0.05; // Maps an '1.0' influence to '1.0', a '0.0' influence to '0.95' 
+        totalWeight += anchors.weights.x;//i].x; // Accumulate total weight 
+        influenceWeightedPosition += anchors.points[i].xy * influence * anchors.weights.x;//[i].x;
     }
-    // calculate the influence that anchor point has on the vertex
-    let influence = 1.0 - nearestDistance; // This is a basic influence calculation
-    pos[vertexIndex] = mix(pos[vertexIndex], nearestAnchor, influence);
 
+    // Calculate final position using weights of influencing anchors 
+    influenceWeightedPosition /= totalWeight; 
+    pos[vertexIndex] = mix(pos[vertexIndex], influenceWeightedPosition, 0.5);  // Adjust mix factor as desired 
 
     var randomDisplacement = vec2<f32>(
         vertexConstants.shudderAmount * (sin(vertexConstants.time * 25.0) - 0.5), 
@@ -87,7 +88,7 @@ const distortionFragmentShaderCode = /* wgsl */`
 class DistortionShaderBehavior extends DefaultShaderBehavior {
   constructor(videoPlayers) {
     super(videoPlayers);
-    this.defaultAnchors = new Float32Array([
+    this.currentAnchors = new Float32Array([
       // Default anchor points values (x, y) pairs, each is padded with 2 empty points because of alignment issues
       // Top-left, 
       -1.0, 1.0, 0.0, 0.0,
@@ -107,6 +108,47 @@ class DistortionShaderBehavior extends DefaultShaderBehavior {
       -1.0, 0.0, 0.0, 0.0
     ]);
     this.anchorBuffer = null;
+    this.anchorWeights = new Float32Array(8).fill(1.0); // Start with equal weights
+    this.targetWeights = null; // Stores weights that the tween targets 
+    this.tweenDuration = 1.0; // Seconds for tween
+    this.tweenStartTime = 0.0;
+    this.tweening = false;
+  }
+
+  resetWeights() {
+    this.anchorWeights.fill(1.0);
+    this.tweening = false;
+  }
+
+  setAnchorWeights(newWeights) {
+    if (newWeights.length !== 8) {
+      console.warn("setAnchorWeights requires an array of length 8.");
+      return;
+    }
+    this.targetWeights = newWeights.slice(); //  Create a copy to tween to 
+    this.tweenStartTime = performance.now();
+    this.tweening = true;
+  }
+
+
+  // Call this in your main render loop 
+  updateTween(webgpu, time) {
+    if (this.tweening) {
+      const elapsed = (time - this.tweenStartTime) / 1000.0;
+      let progress = elapsed / this.tweenDuration;
+
+      if (progress >= 1.0) {
+        this.tweening = false;
+        this.anchorWeights = this.targetWeights.slice();
+        this.targetWeights = null;
+      } else {
+        for (let i = 0; i < 8; i++) {
+          this.anchorWeights[i] = this.anchorWeights[i] * (1 - progress) + this.targetWeights[i] * progress; // Linear lerp
+        }
+      }
+      // update buffers if needed
+      this.updateAnchorBuffer(webgpu);
+    }
   }
 
   getPipeline(webgpu) {
@@ -166,14 +208,15 @@ class DistortionShaderBehavior extends DefaultShaderBehavior {
     return this._pipeline;
   }
 
-  updateAnchorBuffer(webgpu, anchors = this.defaultAnchors) {
-    if (!this.anchorBuffer || this.anchorBuffer.size < anchors.byteLength) {
+  updateAnchorBuffer(webgpu, anchors = this.currentAnchors) {
+    const anchorsAndWeights = new Float32Array([...anchors, ...this.anchorWeights]); 
+    if (!this.anchorBuffer || this.anchorBuffer.size < anchorsAndWeights.byteLength) {
       this.anchorBuffer = webgpu.device.createBuffer({
-        size: anchors.byteLength,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+          size: anchorsAndWeights.byteLength,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
     }
-    webgpu.device.queue.writeBuffer(this.anchorBuffer, 0, anchors.buffer, anchors.byteOffset, anchors.byteLength);
+    webgpu.device.queue.writeBuffer(this.anchorBuffer, 0, anchorsAndWeights.buffer, anchorsAndWeights.byteOffset, anchorsAndWeights.byteLength);
   }
 
   getBindGroupLayout(webgpu) {

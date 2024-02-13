@@ -7,6 +7,7 @@ import SpellCursor from './game1/SpellCursor.js';
 const currentGame = require('./game1/module.js');
 
 window.debug = true;
+window.debugVideoPlayer = false;
 let lastFrameTime = Date.now();
 let frameCount = 0;
 

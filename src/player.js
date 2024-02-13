@@ -1,7 +1,9 @@
 (() => {
+  var __create = Object.create;
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __getProtoOf = Object.getPrototypeOf;
   var __hasOwnProp = Object.prototype.hasOwnProperty;
   var __esm = (fn, res) => function __init() {
     return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
@@ -21,6 +23,14 @@
     }
     return to;
   };
+  var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+    // If the importer is in node compatibility mode or this is not an ESM
+    // file that has been converted to a CommonJS file using a Babel-
+    // compatible transform (i.e. "__esModule" has not been set), then set
+    // "default" to the CommonJS "module.exports" for node compatibility.
+    isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+    mod
+  ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
   // src/trailer/utilities.js
@@ -31,8 +41,8 @@
     if (videoPath.startsWith("http")) {
       return videoPath;
     }
-    console.log("videoPath", videoPath);
-    return `http://127.0.0.1:1420/trailer/${videoPath}`;
+    window.debugVideoPlayer && console.log("videoPath", videoPath);
+    return `http://127.0.0.1:1420/trailer/dist/${videoPath}`;
   }
   function extractWebmPathsFromObject(playgraph2) {
     const string = JSON.stringify(playgraph2);
@@ -117,7 +127,7 @@
             videoElement.onended = this.switchVideo.bind(this);
             this.videoElements[path] = videoElement;
             videoElement.addEventListener("loadeddata", () => {
-              console.log("Video preloaded:", videoElement.src);
+              window.debugVideoPlayer && console.log("Video preloaded:", videoElement.src);
               resolve();
             });
             videoElement.addEventListener("error", (error) => {
@@ -137,7 +147,7 @@
             alert("VideoPlayer: no video element found for " + path);
           }
           this.nextVideo = this.lookupVideo(path);
-          window.debug && console.log(`VideoPlayer ${this.label}: starting ${path}`);
+          window.debugVideoPlayer && console.log(`VideoPlayer ${this.label}: starting ${path}`);
           return this.currentVideo.play();
         }
         // Get the video element for a given path
@@ -362,7 +372,8 @@ struct VertexOutput {
 }
 
 struct AnchorPoints {
-  points: array<vec4<f32>, 8>
+  points: array<vec4<f32>, 8>, // position of each anchor point
+  weights: vec4<f32> // weight of each anchor point
 }
 
 @group(1) @binding(0) var<uniform> vertexConstants: VertexConstants;
@@ -384,21 +395,21 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         vec2(1.0, 1.0)   // bottom-right (y-coordinate flipped)
     );
 
-    var nearestDistance = distance(pos[vertexIndex], anchors.points[0].xy);
-    var nearestAnchor = anchors.points[0].xy;
-
-    // Find the nearest anchor point
+    // calculate combined influences from all anchor points with weighting
+    var totalWeight = 0.0;
+    var influenceWeightedPosition = vec2<f32>(0.0, 0.0);  // Reset before accumulating 
+    
     for (var i = 0; i < 8; i++) {
         let dist = distance(pos[vertexIndex], anchors.points[i].xy);
-        if (dist < nearestDistance) {
-            nearestDistance = dist;
-            nearestAnchor = anchors.points[i].xy;
-        }
+        var influence = 1.0 - dist; 
+        influence = 0.55 + influence * 0.05; // Maps an '1.0' influence to '1.0', a '0.0' influence to '0.95' 
+        totalWeight += anchors.weights.x;//i].x; // Accumulate total weight 
+        influenceWeightedPosition += anchors.points[i].xy * influence * anchors.weights.x;//[i].x;
     }
-    // calculate the influence that anchor point has on the vertex
-    let influence = 1.0 - nearestDistance; // This is a basic influence calculation
-    pos[vertexIndex] = mix(pos[vertexIndex], nearestAnchor, influence);
 
+    // Calculate final position using weights of influencing anchors 
+    influenceWeightedPosition /= totalWeight; 
+    pos[vertexIndex] = mix(pos[vertexIndex], influenceWeightedPosition, 0.5);  // Adjust mix factor as desired 
 
     var randomDisplacement = vec2<f32>(
         vertexConstants.shudderAmount * (sin(vertexConstants.time * 25.0) - 0.5), 
@@ -429,7 +440,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
       DistortionShaderBehavior = class extends DefaultShaderBehavior2 {
         constructor(videoPlayers) {
           super(videoPlayers);
-          this.defaultAnchors = new Float32Array([
+          this.currentAnchors = new Float32Array([
             // Default anchor points values (x, y) pairs, each is padded with 2 empty points because of alignment issues
             // Top-left, 
             -1,
@@ -473,6 +484,41 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
             0
           ]);
           this.anchorBuffer = null;
+          this.anchorWeights = new Float32Array(8).fill(1);
+          this.targetWeights = null;
+          this.tweenDuration = 1;
+          this.tweenStartTime = 0;
+          this.tweening = false;
+        }
+        resetWeights() {
+          this.anchorWeights.fill(1);
+          this.tweening = false;
+        }
+        setAnchorWeights(newWeights) {
+          if (newWeights.length !== 8) {
+            console.warn("setAnchorWeights requires an array of length 8.");
+            return;
+          }
+          this.targetWeights = newWeights.slice();
+          this.tweenStartTime = performance.now();
+          this.tweening = true;
+        }
+        // Call this in your main render loop 
+        updateTween(webgpu, time) {
+          if (this.tweening) {
+            const elapsed = (time - this.tweenStartTime) / 1e3;
+            let progress = elapsed / this.tweenDuration;
+            if (progress >= 1) {
+              this.tweening = false;
+              this.anchorWeights = this.targetWeights.slice();
+              this.targetWeights = null;
+            } else {
+              for (let i = 0; i < 8; i++) {
+                this.anchorWeights[i] = this.anchorWeights[i] * (1 - progress) + this.targetWeights[i] * progress;
+              }
+            }
+            this.updateAnchorBuffer(webgpu);
+          }
         }
         getPipeline(webgpu) {
           if (!this._pipeline) {
@@ -525,14 +571,15 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
           }
           return this._pipeline;
         }
-        updateAnchorBuffer(webgpu, anchors = this.defaultAnchors) {
-          if (!this.anchorBuffer || this.anchorBuffer.size < anchors.byteLength) {
+        updateAnchorBuffer(webgpu, anchors = this.currentAnchors) {
+          const anchorsAndWeights = new Float32Array([...anchors, ...this.anchorWeights]);
+          if (!this.anchorBuffer || this.anchorBuffer.size < anchorsAndWeights.byteLength) {
             this.anchorBuffer = webgpu.device.createBuffer({
-              size: anchors.byteLength,
+              size: anchorsAndWeights.byteLength,
               usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
             });
           }
-          webgpu.device.queue.writeBuffer(this.anchorBuffer, 0, anchors.buffer, anchors.byteOffset, anchors.byteLength);
+          webgpu.device.queue.writeBuffer(this.anchorBuffer, 0, anchorsAndWeights.buffer, anchorsAndWeights.byteOffset, anchorsAndWeights.byteLength);
         }
         getBindGroupLayout(webgpu) {
           if (!this._bindGroupLayout) {
@@ -958,7 +1005,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
           this.maskVideoList = cursorVocabulary._masks;
           delete this.cursorVocabulary._masks;
           const videoList = extractWebmPathsFromVocabulary(cursorVocabulary);
-          videoList.push("/main/blank.webm");
+          videoList.push("/main/blank487f7b22f68312d2c1bbc93b1aea445b.webm");
           console.log("cursor starting with videoList", videoList);
           this.cursorVideoPlayer = new VideoPlayer_default(videoList, cursorVideoPlan.main.bind(this), "cursorMain");
           console.log("mask video list", this.maskVideoList);
@@ -993,7 +1040,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
           const oneTimeHandler = async () => {
             console.log("cursor video ended, starting mask video");
             const currentVideoPath = this.cursorVideoPlayer.currentVideo.src;
-            if (!currentVideoPath.includes("/main/blank.webm")) {
+            if (!currentVideoPath.includes("/main/blank487f7b22f68312d2c1bbc93b1aea445b.webm")) {
               this.cursorVideoPlayer.currentVideo.removeEventListener("ended", oneTimeHandler);
               console.log("current video path", currentVideoPath);
               const maskVideoPath = this.getMaskVideoPath(currentVideoPath);
@@ -1066,10 +1113,22 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
       overlayCanvas2.style.display = "block";
       webgpuCanvas.style.display = "block";
       moduleState2.scene = "see_intro";
-      return "main/blank.webm";
+      return "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm";
     }
     if (moduleState2.scene === "see_intro") {
       return see_intro(currentVideo, moduleState2, playgraph2.intro.eyePlaygraph);
+    }
+  }
+  function distortAnchors(distortionAmount, moduleState2) {
+    const indices = [
+      [16, 17],
+      [20, 21],
+      [24, 25],
+      [28, 29]
+    ];
+    for (let i = 0; i < indices.length; i++) {
+      moduleState2.distortionAnchors.currentAnchors[indices[i][0]] = distortionAmount;
+      moduleState2.distortionAnchors.currentAnchors[indices[i][1]] = distortionAmount;
     }
   }
   function see_intro(currentVideo, moduleState2, playgraph2) {
@@ -1077,17 +1136,15 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
       const currentUserInput = moduleState2.mainUserInputQueue.shift() || "";
       if (currentUserInput === "s") {
         moduleState2.playgraphState = "s";
-        return playgraph2.s["46"].graph[0];
+        return playgraph2.s["6"].graph[0];
       }
-      return "main/blank.webm";
+      return "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm";
     }
     if (moduleState2.playgraphState === "s") {
-      console.log("s");
-      console.log("s");
-      console.log("s");
       const currentUserInput = moduleState2.mainUserInputQueue.shift() || "";
       if (currentUserInput === "se") {
         const lastLetter2 = currentVideo.key.split("_to_")[1].split("-")[0];
+        distortAnchors(0.0621, moduleState2);
         const destination2 = getNextPlaygraphNode(playgraph2.s, lastLetter2, true);
         if (destination2.includes("sink")) {
           moduleState2.playgraphState = "se";
@@ -1103,6 +1160,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
     if (moduleState2.playgraphState === "se") {
       const currentUserInput = moduleState2.mainUserInputQueue.shift() || "";
       if (currentUserInput === "see") {
+        distortAnchors(0.0621, moduleState2);
         const lastLetter2 = currentVideo.key.split("_to_")[1].split("-")[0];
         const destination2 = getNextPlaygraphNode(playgraph2.se, lastLetter2, true);
         if (destination2.includes("sink")) {
@@ -1114,22 +1172,17 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
       }
       const lastLetter = currentVideo.key.split("_to_")[1].split("-")[0];
       const prevLetter = currentVideo.key.split("_to_")[0].replace("see-", "");
-      console.log(lastLetter, prevLetter);
       const destination = getNextPlaygraphNodeNoReversals(playgraph2.se, prevLetter, lastLetter);
       return destination;
     }
     if (moduleState2.playgraphState === "see") {
-      console.log("see");
-      console.log("see");
-      console.log("see");
       const lastLetter = currentVideo.key.split("_to_")[1].split("-")[0];
-      console.log("lastLetter", lastLetter);
+      moduleState2.resetAnchors = true;
       const destination = getNextPlaygraphNode(playgraph2.see, lastLetter);
       return destination;
     }
     if (moduleState2.playgraphState === "see_to_lamp") {
       const lastLetter = currentVideo.key.split("_to_")[1].split("-")[0];
-      console.log("lastLetter", lastLetter);
       const destination = getNextPlaygraphNode(playgraph2.see, lastLetter, true);
       if (destination.includes("sink")) {
         moduleState2.playgraphState = "lamp_intro";
@@ -1142,7 +1195,6 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
     }
     if (moduleState2.playgraphState === "lamp_sequence") {
       const lastLetter = currentVideo.key.split("_to_")[1].split("-")[0];
-      console.log("lastLetter", lastLetter);
       const destination = getNextPlaygraphNode(playgraph2.lamp, lastLetter);
       return destination;
     }
@@ -1153,181 +1205,162 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   });
 
   // src/trailer/game1/intro_playgraphs.js
-  var eyePlaygraph, intro_playgraphs_default;
-  var init_intro_playgraphs = __esm({
-    "src/trailer/game1/intro_playgraphs.js"() {
-      eyePlaygraph = {
-        s: {
-          "65": {
+  var require_intro_playgraphs = __commonJS({
+    "src/trailer/game1/intro_playgraphs.js"(exports, module) {
+      var eyePlaygraph = {
+        see: {
+          "200": {
             "graph": [
-              "game1/clips/see-65_to_57-graph.webm",
-              "game1/clips/see-65_to_52-graph.webm",
-              "game1/clips/see-65_to_46-graph.webm",
-              "game1/clips/see-65_to_61-graph.webm"
+              "game1/clips/see-200_to_188-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-200_to_178-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-200_to_168-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {
-              "123-sink": "game1/clips/see-65_to_123-sink.webm"
+              "lamp-sink": "game1/clips/see-200_to_lamp-sink487f7b22f68312d2c1bbc93b1aea445b.webm"
             }
           },
-          "61": {
+          "188": {
             "graph": [
-              "game1/clips/see-61_to_57-graph.webm",
-              "game1/clips/see-61_to_52-graph.webm",
-              "game1/clips/see-61_to_46-graph.webm",
-              "game1/clips/see-61_to_65-graph.webm"
+              "game1/clips/see-188_to_200-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-188_to_178-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-188_to_168-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
-          "57": {
+          "178": {
             "graph": [
-              "game1/clips/see-57_to_65-graph.webm",
-              "game1/clips/see-57_to_61-graph.webm",
-              "game1/clips/see-57_to_52-graph.webm",
-              "game1/clips/see-57_to_46-graph.webm"
+              "game1/clips/see-178_to_200-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-178_to_188-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-178_to_168-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
-          "52": {
+          "168": {
             "graph": [
-              "game1/clips/see-52_to_65-graph.webm",
-              "game1/clips/see-52_to_61-graph.webm",
-              "game1/clips/see-52_to_57-graph.webm",
-              "game1/clips/see-52_to_46-graph.webm"
-            ],
-            "sink": {}
-          },
-          "46": {
-            "graph": [
-              "game1/clips/see-46_to_65-graph.webm",
-              "game1/clips/see-46_to_61-graph.webm",
-              "game1/clips/see-46_to_57-graph.webm",
-              "game1/clips/see-46_to_52-graph.webm"
+              "game1/clips/see-168_to_200-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-168_to_188-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-168_to_178-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           }
         },
         se: {
-          "125": {
+          "79": {
             "graph": [
-              "game1/clips/see-125_to_123-graph.webm",
-              "game1/clips/see-125_to_120-graph.webm",
-              "game1/clips/see-125_to_118-graph.webm"
+              "game1/clips/see-79_to_73-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-79_to_67-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-79_to_62-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
+          },
+          "73": {
+            "graph": [
+              "game1/clips/see-73_to_79-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-73_to_67-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-73_to_62-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
+          },
+          "67": {
+            "graph": [
+              "game1/clips/see-67_to_79-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-67_to_73-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-67_to_62-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
+          },
+          "62": {
+            "graph": [
+              "game1/clips/see-62_to_79-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-62_to_73-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-62_to_67-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {
-              "164-sink": "game1/clips/see_125_to_164-sink.webm"
+              "168-sink": "game1/clips/see-62_to_168-sink487f7b22f68312d2c1bbc93b1aea445b.webm"
             }
-          },
-          "123": {
-            "graph": [
-              "game1/clips/see-123_to_125-graph.webm",
-              "game1/clips/see-123_to_120-graph.webm",
-              "game1/clips/see-123_to_118-graph.webm"
-            ],
-            "sink": {}
-          },
-          "120": {
-            "graph": [
-              "game1/clips/see-120_to_125-graph.webm",
-              "game1/clips/see-120_to_123-graph.webm",
-              "game1/clips/see-120_to_118-graph.webm"
-            ],
-            "sink": {}
-          },
-          "118": {
-            "graph": [
-              "game1/clips/see-118_to_125-graph.webm",
-              "game1/clips/see-118_to_123-graph.webm",
-              "game1/clips/see-118_to_120-graph.webm"
-            ],
-            "sink": {}
           }
         },
-        see: {
-          "200": {
+        s: {
+          "21": {
             "graph": [
-              "game1/clips/see-200_to_164-graph.webm"
+              "game1/clips/see-21_to_17-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-21_to_10-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-21_to_6-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {
-              "200-sink": "game1/clips/see_200_to_lamp-sink.webm"
+              "62-sink": "game1/clips/see-21_to_62-sink487f7b22f68312d2c1bbc93b1aea445b.webm"
             }
           },
-          "186": {
+          "17": {
             "graph": [
-              "game1/clips/see-186_to_200-graph.webm",
-              "game1/clips/see-186_to_175-graph.webm",
-              "game1/clips/see-186_to_167-graph.webm",
-              "game1/clips/see-186_to_164-graph.webm"
-            ],
-            // todo: in 'sink' mode we should automatically pick 'sink' and it should contain
-            // a link to the nearest sink
-            "sink": {}
-          },
-          "175": {
-            "graph": [
-              "game1/clips/see-175_to_200-graph.webm",
-              "game1/clips/see-175_to_186-graph.webm",
-              "game1/clips/see-175_to_167-graph.webm",
-              "game1/clips/see-175_to_164-graph.webm"
+              "game1/clips/see-17_to_21-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-17_to_10-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-17_to_6-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
-          "167": {
+          "10": {
             "graph": [
-              "game1/clips/see-167_to_200-graph.webm",
-              "game1/clips/see-167_to_186-graph.webm",
-              "game1/clips/see-167_to_175-graph.webm",
-              "game1/clips/see-167_to_164-graph.webm"
+              "game1/clips/see-10_to_21-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-10_to_17-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-10_to_6-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
-          "164": {
+          "6": {
             "graph": [
-              "game1/clips/see-164_to_200-graph.webm",
-              "game1/clips/see-164_to_186-graph.webm",
-              "game1/clips/see-164_to_175-graph.webm",
-              "game1/clips/see-164_to_167-graph.webm"
+              "game1/clips/see-6_to_21-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-6_to_17-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-6_to_10-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
+          },
+          "see": {
+            "graph": [],
+            "sink": {
+              "intro-sink": "game1/clips/see_intro-sink487f7b22f68312d2c1bbc93b1aea445b.webm"
+            }
           }
         },
-        lamp_intro: "game1/clips/lamp_intro_to_487-sink.webm",
+        lamp_intro: "game1/clips/lamp_intro_to_487-sink487f7b22f68312d2c1bbc93b1aea445b.webm",
         lamp: {
           "536": {
             "graph": [
-              "game1/clips/lamp-536_to_522-graph.webm",
-              "game1/clips/lamp-536_to_502-graph.webm",
-              "game1/clips/lamp-536_to_487-graph.webm"
+              "game1/clips/lamp-536_to_522-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/lamp-536_to_502-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/lamp-536_to_487-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
           "522": {
             "graph": [
-              "game1/clips/lamp-522_to_536-graph.webm",
-              "game1/clips/lamp-522_to_502-graph.webm",
-              "game1/clips/lamp-522_to_487-graph.webm"
+              "game1/clips/lamp-522_to_536-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/lamp-522_to_502-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/lamp-522_to_487-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
           "502": {
             "graph": [
-              "game1/clips/lamp-502_to_536-graph.webm",
-              "game1/clips/lamp-502_to_522-graph.webm",
-              "game1/clips/lamp-502_to_487-graph.webm"
+              "game1/clips/lamp-502_to_536-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/lamp-502_to_522-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/lamp-502_to_487-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
           "487": {
             "graph": [
-              "game1/clips/lamp-487_to_536-graph.webm",
-              "game1/clips/lamp-487_to_522-graph.webm",
-              "game1/clips/lamp-487_to_502-graph.webm"
+              "game1/clips/lamp-487_to_536-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/lamp-487_to_522-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/lamp-487_to_502-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           }
         }
       };
-      intro_playgraphs_default = {
-        blank: "main/blank.webm",
+      module.exports = {
+        // export default {
+        blank: "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm",
         intro: {
           eyePlaygraph
         }
@@ -1345,8 +1378,8 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
       init_SpellCursor();
       init_DistortionShaderBehavior();
       init_stateHandlers();
-      init_intro_playgraphs();
-      var webmPaths = extractWebmPathsFromObject(intro_playgraphs_default);
+      var import_intro_playgraphs = __toESM(require_intro_playgraphs());
+      var webmPaths = extractWebmPathsFromObject(import_intro_playgraphs.default);
       var canvas2;
       var isLetterAnimating = false;
       var textFlashAnimationDuration = 100;
@@ -1463,8 +1496,8 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         userString: ""
       };
       function mainNextVideoStrategy(currentVideo) {
-        distortAnchors();
-        return mainVideoSwitcher(currentVideo, moduleState, intro_playgraphs_default);
+        distortAnchors2();
+        return mainVideoSwitcher(currentVideo, moduleState, import_intro_playgraphs.default);
       }
       function updateTextAndCursor() {
         return new Promise((resolve, reject) => {
@@ -1504,24 +1537,24 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
           resolve();
         });
       }
-      function getNextCursorMaskVideo(currentVideo, playgraph2, userInput2) {
+      function getNextCursorMaskVideo(currentVideo, playgraph3, userInput2) {
         const nextUserInput = moduleState.cursorUserInputQueue.shift() || "";
         if (this.cursorState !== "blank") {
           return "main/stretch2_3l_idle_mask.webm";
         }
-        return "main/blank.webm";
+        return "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm";
       }
-      function getNextCursorVideo(currentVideo, playgraph2, userInput2) {
+      function getNextCursorVideo(currentVideo, playgraph3, userInput2) {
         const nextUserInput = moduleState.cursorUserInputQueue.shift() || "";
         if (this.cursorState === "blank" && nextUserInput === "") {
-          return "main/blank.webm";
+          return "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm";
         }
         const vocabularyWord = this.findVocabularyWord(this.cursorState);
         const vocabulary = this.cursorVocabulary[vocabularyWord];
         let nextFragment = vocabulary[this.cursorState];
         if (!nextFragment) {
           alert("error no next fragment for ", this.cursorState);
-          return "main/blank.webm";
+          return "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm";
         }
         const nextState = nextUserInput !== "" ? nextUserInput : this.cursorState;
         if (nextState === this.cursorState) {
@@ -1534,7 +1567,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
           this.cursorState = nextState;
           return vocabulary[nextFragment.next].entry;
         }
-        return "main/blank.webm";
+        return "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm";
       }
       var defaultCursorEventHandlers = {
         mousemove: async function(event) {
@@ -1594,7 +1627,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         canvas2 = gpuDefinitions.canvas;
         const videoPlayer = new VideoPlayer_default(webmPaths, mainNextVideoStrategy, false);
         mainBehavior = new DistortionShaderBehavior([videoPlayer]);
-        moduleState.distortionAnchors.currentAnchors = mainBehavior.defaultAnchors;
+        moduleState.distortionAnchors.currentAnchors = mainBehavior.currentAnchors;
         window2.mainInteractiveVideo = new InteractiveVideo_default(gpuDefinitions, videoPlayer, mainBehavior);
         const cursorVocabulary = {
           "_masks": [
@@ -1602,19 +1635,55 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
             "main/stretch1_3look_idle_mask.webm"
           ],
           "blank": {
-            "blank": { entry: "main/blank.webm", idle: "main/blank.webm", next: "blank" }
+            "blank": {
+              entry: "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm",
+              idle: "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm",
+              next: "blank"
+            }
           },
           "open": {
-            "o": { entry: "main/o2.webm", idle: "main/o2_idle.webm", next: "op" },
-            "op": { entry: "main/op4.webm", idle: "main/op_idle.webm", next: "ope" },
-            "ope": { entry: "main/ope4.webm", idle: "main/ope5_idle.webm", next: "open" },
-            "open": { entry: "main/open_4.webm", idle: "main/open_idle.webm", next: "open" }
+            "o": {
+              entry: "main/o2.webm",
+              idle: "main/o2_idle.webm",
+              next: "op"
+            },
+            "op": {
+              entry: "main/op4.webm",
+              idle: "main/op_idle.webm",
+              next: "ope"
+            },
+            "ope": {
+              entry: "main/ope4.webm",
+              idle: "main/ope5_idle.webm",
+              next: "open"
+            },
+            "open": {
+              entry: "main/open_4.webm",
+              idle: "main/open_idle.webm",
+              next: "open"
+            }
           },
           "look": {
-            "l": { entry: "main/3l.webm", idle: "main/stretch2_3l_idle.webm", next: "lo" },
-            "lo": { entry: "main/3lo.webm", idle: "main/stretch_3lo_idle.webm", next: "loo" },
-            "loo": { entry: "main/3loo.webm", idle: "main/3loo_idle.webm", next: "look" },
-            "look": { entry: "main/3look.webm", idle: "main/stretch1_3look_idle.webm", next: "look" }
+            "l": {
+              entry: "main/3l.webm",
+              idle: "main/stretch2_3l_idle.webm",
+              next: "lo"
+            },
+            "lo": {
+              entry: "main/3lo.webm",
+              idle: "main/stretch_3lo_idle.webm",
+              next: "loo"
+            },
+            "loo": {
+              entry: "main/3loo.webm",
+              idle: "main/3loo_idle.webm",
+              next: "look"
+            },
+            "look": {
+              entry: "main/3look.webm",
+              idle: "main/stretch1_3look_idle.webm",
+              next: "look"
+            }
           }
         };
         const cursorPlan = {
@@ -1625,9 +1694,15 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         window2.spellCursor.currentNodeIndex = 0;
         renderLoop2();
         await new Promise((r) => setTimeout(r, 200));
-        await window2.mainInteractiveVideo.start("main/blank.webm");
+        await window2.mainInteractiveVideo.start("main/blank487f7b22f68312d2c1bbc93b1aea445b.webm");
       }
-      function distortAnchors() {
+      function distortAnchors2() {
+        if (moduleState.resetAnchors) {
+          moduleState.resetAnchors = false;
+          mainBehavior.resetWeights();
+        } else {
+          mainBehavior.updateTween(window.mainInteractiveVideo.webgpu, moduleState.time);
+        }
         moduleState.time += moduleState.timeIncrement;
       }
       var handleEvent = (window2, eventName, event) => {
@@ -1676,6 +1751,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   init_SpellCursor();
   var currentGame = require_module();
   window.debug = true;
+  window.debugVideoPlayer = false;
   var lastFrameTime = Date.now();
   var frameCount = 0;
   var shudderAmount = 2e-6;

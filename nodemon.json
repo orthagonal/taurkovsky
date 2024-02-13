@@ -1,0 +1,9 @@
+{
+  "watch": ["src"],  
+  "ext": "js", 
+  "wait": 200,
+  "ignore": ["src/player.js"], 
+  "events": {
+    "restart": "esbuild src/trailer/src.js  --bundle  --outfile=src/player.js && node hash-assets.js"
+  }
+}

@@ -44,7 +44,7 @@ class VideoPlayer {
             this.videoElements[path] = videoElement;
             
             videoElement.addEventListener('loadeddata', () => {
-              console.log('Video preloaded:', videoElement.src);
+              window.debugVideoPlayer && console.log('Video preloaded:', videoElement.src);
               resolve(); // Resolve the promise when loaded
             });
         
@@ -66,7 +66,7 @@ class VideoPlayer {
             alert('VideoPlayer: no video element found for ' + path);
         }
         this.nextVideo = this.lookupVideo(path);
-        window.debug && console.log(`VideoPlayer ${this.label}: starting ${path}`);
+        window.debugVideoPlayer && console.log(`VideoPlayer ${this.label}: starting ${path}`);
         return this.currentVideo.play();
     }
 

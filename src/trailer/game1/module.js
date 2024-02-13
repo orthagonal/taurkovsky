@@ -255,29 +255,51 @@ async function start(window, gpuDefinitions, renderLoop) {
   const videoPlayer = new VideoPlayer(webmPaths, mainNextVideoStrategy, false);
   // const mainBehavior = new DefaultShaderBehavior([videoPlayer]);
   mainBehavior = new DistortionShaderBehavior([videoPlayer]);
-  moduleState.distortionAnchors.currentAnchors = mainBehavior.defaultAnchors;
+  moduleState.distortionAnchors.currentAnchors = mainBehavior.currentAnchors;
   window.mainInteractiveVideo = new InteractiveVideo(gpuDefinitions, videoPlayer, mainBehavior);
   // window.hitboxShader = new HitboxShaderBehavior(gpuDefinitions, window.spellCursor);
 
   const cursorVocabulary = {
-    '_masks': [
-      'main/stretch2_3l_idle_mask.webm',
-      'main/stretch1_3look_idle_mask.webm',
+    "_masks": [
+      "main/stretch2_3l_idle_mask.webm",
+      "main/stretch1_3look_idle_mask.webm",
     ],
-    'blank': {
-      'blank': { entry: 'main/blank.webm', idle: 'main/blank.webm', next: 'blank' },
+    "blank": {
+      "blank": { 
+        entry: "main/blank.webm", 
+        idle: "main/blank.webm", 
+        next: "blank" 
+      },
     },
-    'open': {
-      'o': { entry: 'main/o2.webm', idle: 'main/o2_idle.webm', next: 'op' },
-      'op': { entry: 'main/op4.webm', idle: 'main/op_idle.webm', next: 'ope' },
-      'ope': { entry: 'main/ope4.webm', idle: 'main/ope5_idle.webm', next: 'open' },
-      'open': { entry: 'main/open_4.webm', idle: 'main/open_idle.webm', next: 'open' },
+    "open": {
+      "o": { 
+        entry: "main/o2.webm", 
+        idle: "main/o2_idle.webm", next: "op" },
+      "op": { 
+        entry: "main/op4.webm", 
+        idle: "main/op_idle.webm", next: "ope" },
+      "ope": { 
+        entry: "main/ope4.webm", 
+        idle: "main/ope5_idle.webm", next: "open" },
+      "open": { 
+        entry: "main/open_4.webm", 
+        idle: "main/open_idle.webm", next: "open" },
     },
-    'look': {
-      'l': { entry: 'main/3l.webm', idle: 'main/stretch2_3l_idle.webm', next: 'lo' },
-      'lo': { entry: 'main/3lo.webm', idle: 'main/stretch_3lo_idle.webm', next: 'loo' },
-      'loo': { entry: 'main/3loo.webm', idle: 'main/3loo_idle.webm', next: 'look' },
-      'look': { entry: 'main/3look.webm', idle: 'main/stretch1_3look_idle.webm', next: 'look' },
+    "look": {
+      "l": { entry: 
+        "main/3l.webm", 
+        idle: "main/stretch2_3l_idle.webm", next: "lo" },
+      "lo": { 
+        entry: "main/3lo.webm", 
+        idle: "main/stretch_3lo_idle.webm", next: "loo" },
+      "loo": { 
+        entry: "main/3loo.webm", 
+        idle: "main/3loo_idle.webm", next: "look" },
+      "look": { 
+        entry: "main/3look.webm", 
+        idle:
+        
+        "main/stretch1_3look_idle.webm", next: "look" },
     }
   };
   const cursorPlan = {
@@ -294,14 +316,30 @@ async function start(window, gpuDefinitions, renderLoop) {
 }
 
 function distortAnchors() {
-  // Update the anchor buffer with the distorted anchors
-  // mainBehavior.updateAnchorBuffer(window.mainInteractiveVideo.webgpu, moduleState.distortionAnchors.currentAnchors);
-  // Increment time for the next distortion cycle
+  if (moduleState.resetAnchors) {
+    moduleState.resetAnchors = false;
+    mainBehavior.resetWeights();
+  } else {
+    mainBehavior.updateTween(window.mainInteractiveVideo.webgpu, moduleState.time);
+  }
   moduleState.time += moduleState.timeIncrement;
 }
 
+// modes for ACT MORE LIKE A GAME - ACT MORE LIKE A MOVIE 
+// PIN IT TO CAUSE NEXT TRANSITION
+// THIS GIVES YOU SOME ERROR ROOM ON THE VIDEOS
+// - show pins
+// - show targets
+// - activate drag-drop for the pins
+// - detect when the pin is dropped on the target, lock it
+// - detect when all pins are dropped and do the transition
+
+
+
+
+
 // i need to make it so that only one place advances the game state
-// and the ohter handles getting the correct video
+// and the other handles getting the correct video
 const handleEvent = (window, eventName, event) => {
   if (!window.spellCursor) return;
   if (isLetterAnimating) return;  // If a letter is animating, ignore other keypresses

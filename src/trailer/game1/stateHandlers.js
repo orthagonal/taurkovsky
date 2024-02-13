@@ -57,38 +57,34 @@ function mainVideoSwitcher(currentVideo, moduleState, playgraph) {
 }
 
 function distortAnchors(distortionAmount, moduleState) {
-  const indices = [[0, 1], 
-  // [3, 4],
-  [7,8],
-  [14, 15],];
+  const indices = [
+    [16, 17],
+    [20, 21],
+    [24, 25],
+    [28, 29],
+  ];
   for (let i = 0; i < indices.length; i++) {
-    const adjustAmountX = Math.sin(moduleState.time) * distortionAmount;
-    const adjustAmountY = Math.cos(moduleState.time) * distortionAmount;
-    moduleState.distortionAnchors.currentAnchors[indices[i][0]] += adjustAmountX;
-    moduleState.distortionAnchors.currentAnchors[indices[i][1]] += adjustAmountY;
+    moduleState.distortionAnchors.currentAnchors[indices[i][0]] = distortionAmount;
+    moduleState.distortionAnchors.currentAnchors[indices[i][1]] = distortionAmount;
   }
 }
 
 function see_intro(currentVideo, moduleState, playgraph) {
-  // distortAnchors(0.004, moduleState);
   // return a random vidoe from playgraph.s or just keep laying blank::
   if (moduleState.playgraphState === 'blank') {
     const currentUserInput = moduleState.mainUserInputQueue.shift() || '';
     if (currentUserInput === 's') {
       moduleState.playgraphState = 's';
-      return playgraph.s['46'].graph[0];
+      return playgraph.s['6'].graph[0];
     }
     return 'main/blank.webm';
   }
   // return a sink video if they type 'se' or just keep playing the same video
   if (moduleState.playgraphState === 's') {
-    console.log('s');
-    console.log('s');
-    console.log('s');
     const currentUserInput = moduleState.mainUserInputQueue.shift() || '';
     if (currentUserInput === 'se') {
       const lastLetter = currentVideo.key.split('_to_')[1].split('-')[0];
-      // distortAnchors(0.011, mainBehavior.defaultAnchors, maxAnchors, minAnchors);
+      distortAnchors(0.0621, moduleState);
       const destination = getNextPlaygraphNode(playgraph.s, lastLetter, true);
       if (destination.includes('sink')) {
         moduleState.playgraphState = 'se';
@@ -99,15 +95,15 @@ function see_intro(currentVideo, moduleState, playgraph) {
       return destination;
     }
     const lastLetter = currentVideo.key.split('_to_')[1].split('-')[0];
-    // distortAnchors(0.011, mainBehavior.defaultAnchors, maxAnchors, minAnchors);
     const destination = getNextPlaygraphNode(playgraph.s, lastLetter);
     return destination;
   }
   if (moduleState.playgraphState === 'se') {
     const currentUserInput = moduleState.mainUserInputQueue.shift() || '';
     if (currentUserInput === 'see') {
+      distortAnchors(0.0621, moduleState);
       const lastLetter = currentVideo.key.split('_to_')[1].split('-')[0];
-      // distortAnchors(0.011, mainBehavior.defaultAnchors, maxAnchors, minAnchors);
+      // distortAnchors(0.0621, mainBehavior.defaultAnchors, maxAnchors, minAnchors);
       const destination = getNextPlaygraphNode(playgraph.se, lastLetter, true);
       if (destination.includes('sink')) {
         moduleState.playgraphState = 'see';
@@ -119,26 +115,19 @@ function see_intro(currentVideo, moduleState, playgraph) {
     }
     const lastLetter = currentVideo.key.split('_to_')[1].split('-')[0];
     const prevLetter = currentVideo.key.split('_to_')[0].replace('see-', '');
-    console.log(lastLetter, prevLetter);
-    // distortAnchors(0.011, mainBehavior.defaultAnchors, maxAnchors, minAnchors);
     const destination = getNextPlaygraphNodeNoReversals(playgraph.se, prevLetter, lastLetter);
     return destination;
   }
   if (moduleState.playgraphState === 'see') {
-    console.log('see');
-    console.log('see');
-    console.log('see');
     // const currentUserInput = moduleState.mainUserInputQueue.shift() || '';
     const lastLetter = currentVideo.key.split('_to_')[1].split('-')[0];
-    // distortAnchors(0.011, mainBehavior.defaultAnchors, maxAnchors, minAnchors);
-    console.log('lastLetter', lastLetter);
+    moduleState.resetAnchors = true;
     const destination = getNextPlaygraphNode(playgraph.see, lastLetter);
     return destination;
   }
   if (moduleState.playgraphState === 'see_to_lamp') {
     const lastLetter = currentVideo.key.split('_to_')[1].split('-')[0];
-    // distortAnchors(0.011, mainBehavior.defaultAnchors, maxAnchors, minAnchors);
-    console.log('lastLetter', lastLetter);
+    // distortAnchors(0.0621, mainBehavior.defaultAnchors, maxAnchors, minAnchors);
     const destination = getNextPlaygraphNode(playgraph.see, lastLetter, true);
     if (destination.includes('sink')) {
       moduleState.playgraphState = 'lamp_intro';
@@ -152,7 +141,6 @@ function see_intro(currentVideo, moduleState, playgraph) {
   if (moduleState.playgraphState === 'lamp_sequence') {
     // this should start at lamp-487
     const lastLetter = currentVideo.key.split('_to_')[1].split('-')[0];
-    console.log('lastLetter', lastLetter);
     const destination = getNextPlaygraphNode(playgraph.lamp, lastLetter);
     return destination;
   }
@@ -160,7 +148,6 @@ function see_intro(currentVideo, moduleState, playgraph) {
 
 function nextVideoLantern(currentVideo) {
   const lastLetter = currentVideo.key.split('_to_')[1].split('-')[0];
-  // distortAnchors(0.011, mainBehavior.defaultAnchors, maxAnchors, minAnchors);
   const destination = getNextPlaygraphNode(playgraph.see, lastLetter);
   return destination;
 }

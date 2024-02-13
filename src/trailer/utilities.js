@@ -10,9 +10,9 @@ function getVideoSrc(videoPath) {
     return videoPath;
   }
   // Running in development, use local server URL
-  console.log('videoPath', videoPath);
+  window.debugVideoPlayer && console.log('videoPath', videoPath);
   // return `http://127.0.0.1:1420/trailer/${videoPath}`;
-  return `http://127.0.0.1:1420/trailer/${videoPath}`;
+  return `http://127.0.0.1:1420/trailer/dist/${videoPath}`;
 }
 
 function extractWebmPathsFromObject(playgraph) {
