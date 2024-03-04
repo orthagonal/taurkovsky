@@ -23,8 +23,16 @@ struct AnchorPoints {
   // weights: vec4<f32> // weight of each anchor point
 }
 
+struct CircleParams {
+  center: vec2<f32>,
+  radius: f32,
+  color: vec4<f32>, 
+}
+
+
 @group(1) @binding(0) var<uniform> vertexConstants: VertexConstants;
 @group(1) @binding(1) var<uniform> anchors: AnchorPoints;
+// @group(1) @binding(2) var<uniform> circle: CircleParams; // Add uniforms for the circle
 
 @vertex
 fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
@@ -55,9 +63,15 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 
     // Directly use the closest anchor's offset, clamp between -1 and 1:
     pos[vertexIndex] = anchors.points[closestAnchorIndex].xy * 2.00 - 1.0;
-    // pos[vertexIndex].x = clamp(pos[vertexIndex].x, -1.0, 1.0);
-    // pos[vertexIndex].y = clamp(pos[vertexIndex].y, -1.0, 1.0);
-
+    const numSegments = 32u; // You can adjust for smoothness
+    let angleIncrement = 2.0 * 3.14 / f32(numSegments); 
+    let angle = angleIncrement * f32(vertexIndex);
+  
+    // let offsetX = circle.radius * cos(angle);
+    // let offsetY = circle.radius * sin(angle);
+  
+    // pos[vertexIndex] += vec2<f32>(circle.center.x + offsetX, circle.center.y + offsetY); 
+  
     var randomDisplacement = vec2<f32>(
         vertexConstants.shudderAmount * (sin(vertexConstants.time * 25.0) - 0.5), 
         vertexConstants.shudderAmount * (cos(vertexConstants.time * 30.0) - 0.5)
@@ -108,6 +122,7 @@ class DistortionShaderBehavior extends DefaultShaderBehavior {
       0.0, 0.5
     ]); 
     this.anchorBuffer = null;
+    this.circleParamsBuffer = null;
     this.anchorWeights = new Float32Array(8).fill(1.0); // Start with equal weights
   }
 
@@ -125,7 +140,8 @@ class DistortionShaderBehavior extends DefaultShaderBehavior {
 
   getPipeline(webgpu) {
     if (!this._pipeline) {
-      this.updateAnchorBuffer(webgpu);
+      this.updateAnchorBuffer(webgpu);    
+  
       // Create and return the default pipeline configuration
       // use the two shaders defined above:
       const vertexModule = webgpu.device.createShaderModule({ code: distortionVertexShaderCode });
@@ -134,7 +150,8 @@ class DistortionShaderBehavior extends DefaultShaderBehavior {
       const vertexBGL = webgpu.device.createBindGroupLayout({
         entries: [
           { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
-          { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }
+          { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+          // { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }
         ]
       });
 
@@ -142,7 +159,9 @@ class DistortionShaderBehavior extends DefaultShaderBehavior {
         layout: vertexBGL,
         entries: [
           { binding: 0, resource: { buffer: webgpu.vertexConstants } },
-          { binding: 1, resource: { buffer: this.anchorBuffer } }
+          { binding: 1, resource: { buffer: this.anchorBuffer } },
+          // { binding: 2, resource: { buffer: this.circleParamsBuffer } }
+
         ]
       });
 
@@ -200,7 +219,7 @@ class DistortionShaderBehavior extends DefaultShaderBehavior {
           // Entry for the external texture used in the fragment shader
           { binding: 1, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
           // Entry for the uniform buffer used in both vertex and fragment shaders
-          { binding: 2, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+          { binding: 2, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }
         ],
       });
     }
@@ -209,6 +228,14 @@ class DistortionShaderBehavior extends DefaultShaderBehavior {
 
   renderBindGroup(textureList, renderPassEncoder, webgpu, anchors) {
     this.updateAnchorBuffer(webgpu, anchors);
+    const circleCenter = new Float32Array([0.5, 1.0]); // Normalized coordinates
+    const circleRadius = 0.05; // Adjust as needed
+    const circleColor = new Float32Array([1.0, 0.0, 0.0, 1.0]); // Red
+    webgpu.circleParamsBuffer = webgpu.device.createBuffer({
+      size: 24,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
     const mainExternalTexture = textureList[0];
     const bindGroup = webgpu.device.createBindGroup({
       layout: this.getBindGroupLayout(webgpu), // Assuming this is the correct layout
@@ -224,5 +251,6 @@ class DistortionShaderBehavior extends DefaultShaderBehavior {
     renderPassEncoder.draw(4, 1, 0, 0);
   }
 };
-alert('update');
+
 export { DistortionShaderBehavior }
+

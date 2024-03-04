@@ -1,3 +1,10 @@
+const unhashedPaths = [
+  require('./src/trailer/game1/intro_playgraphs.js'),
+  require('./src/trailer/game1/narrationStateHandlers.js'),
+  require('./src/trailer/game1/wordStateHandlers.js'),
+];
+const webmPaths = unhashedPaths.map(extractWebmPathsFromObject).flat();
+
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto-js'); 
@@ -29,8 +36,6 @@ function extractWebmPathsFromObject(playgraph) {
   const webmPaths = string.match(regex);
   return webmPaths;
 }
-const playgraph = require('./src/trailer/game1/intro_playgraphs.js');
-const webmPaths = extractWebmPathsFromObject(playgraph);
 
 function processAssets(webmPaths) { // Now accepts a list of paths
   let tried = 0;

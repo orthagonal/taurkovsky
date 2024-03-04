@@ -106,7 +106,7 @@ async function initWebGPU() {
     context = canvas.getContext("webgpu", { alpha: true });
 
     mousePositionBuffer = device.createBuffer({
-        size: 8,  // 2 float32 values: x and y
+        size: 32,  // must be at least 32 to accomdate padding
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -170,16 +170,19 @@ async function renderFrame() {
     const commandEncoder = device.createCommandEncoder();
     const renderPassEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
 
-    // Wait for the video frame to update
-    if (!window.mainInteractiveVideo.blocked) {
-        window.mainInteractiveVideo.renderFrame(renderPassEncoder);
-        if (window.spellCursor) {
-            window.spellCursor.renderFrame(renderPassEncoder);
-        }
-        if (window.hitboxShader) {
-            window.hitboxShader.renderFrame(renderPassEncoder);
-        }
+    // your module should set up all of the interactive video objects in window.interactiveVideos
+    // and  a 'main' interactive video in window.mainInteractiveVideo to control when it's ready to render
+    for (let i = 0; i < window.interactiveVideos.length; i++) {
+        // if (!window.interactiveVideos[i].blocked) {
+            window.interactiveVideos[i].renderFrame(renderPassEncoder);
+        // }
     }
+    // if (window.spellCursor) {
+        //     window.spellCursor.renderFrame(renderPassEncoder);
+        // }
+        // if (window.hitboxShader) {
+        //     window.hitboxShader.renderFrame(renderPassEncoder);
+        // }
     renderPassEncoder.end();
     device.queue.submit([commandEncoder.finish()]);
     // await scanHitboxPixels(commandEncoder);
@@ -188,7 +191,7 @@ async function renderFrame() {
 async function renderLoop() {
     renderLoopCount++;
     updateFPS();
-    currentGame.updateTextAndCursor();
+    currentGame.updateDOM();
     const currentTime = performance.now();
     const elapsedTime = (currentTime - startTime) / 1000.0;  // Convert to seconds
     // Update the uniform buffer with the new time value
@@ -386,4 +389,7 @@ window.onload = async function () {
 
     // Add listeners for various user interactions
     document.addEventListener('click', playOnInteraction);
+    setTimeout(() => {
+        // playOnInteraction();
+    }, 4000);
 };

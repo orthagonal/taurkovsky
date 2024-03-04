@@ -6,16 +6,74 @@
     <link rel="stylesheet" href="styles.css"/>
 </head>
 
+<style>
+
+    
+    #keywordSlots {
+        z-index: 1000;  
+        position: relative;
+        left: 50%;
+        top: -30%;
+        opacity: 0;
+        transition: opacity 0.5s ease-in-out; 
+    }
+
+    #keywordSlots.fade-in {
+        opacity: 1;          /* Fully visible when fade-in class is present */
+    }
+
+    #keywordSlots.fade-out {
+        opacity: 0;          /* Hidden when fade-out class is present */
+    }
+
+    .draggable-circle, #textContainer, #latestLetterContainer {
+        position: absolute; 
+        z-index: 1000;  
+    }
+    
+    .empty-slot, .letter-slot {
+        display: inline-block;
+        width: 30px;  
+        height: 30px; 
+        margin-right: 5px; 
+        border: 1px solid white;
+        color: white;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 5px;
+        border-radius: 5px;
+        z-index: 1000; 
+    }
+            
+    .cursor { 
+        display: inline-block;
+        width: 6px; 
+        height: 20px;
+        background-color: white; 
+        margin-left: 3px;    
+        animation: blink 1s linear infinite alternate; 
+      }
+      
+      @keyframes blink {
+        0%   { opacity: 1; } 
+        100% { opacity: 0; } 
+      }
+
+      .fade-out {
+        opacity: 0;
+        transition: opacity 0.5s ease-out; 
+      }
+</style>
 <body>
     <div id="fpsCounter">FPS: 0</div>
     <div id="videoNameDisplay">Video Name: <span id="currentVideoName">Loading...</span></div>
     <div id="userInputDisplay">Loading...</div>
-    <div id="textContainer"></div>
-    <div id="latestLetterContainer"></div>
     <canvas id="overlayCanvas" width="1920" height="1080" style="display: none;"></canvas>
     <canvas id="webgpuCanvas" width="1920" height="1080" style="display: none;"></canvas>
+    <div id="textContainer"></div>
+    <div id="latestLetterContainer"></div>
+    <div class="draggable-circle"> </div> 
     <div class="container">
-        <input id="userKeyboardElement" class="centered-input" type="text" placeholder="Type here to set a cursor...">
+        <input id="userKeyboardElement" class="centered-input" type="text" >
     </div>
     <script src="player.js"> </script>
 </body>

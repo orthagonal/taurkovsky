@@ -39,8 +39,10 @@ const vertexShaderCode = /* wgsl */`
 
 // pixels of the cursor when there is a mask applied
 const maskShaderCode = /* wgsl */`
-    struct MouseUniform {
-        mousePosition: vec2<f32>
+    struct SpriteUniform {
+        position: vec2<f32>,
+        rotation: f32,
+        scale: vec2<f32>
     };
 
     struct CursorUniform {
@@ -58,7 +60,7 @@ const maskShaderCode = /* wgsl */`
 
     @group(0) @binding(0) var mySampler: sampler;
     @group(0) @binding(1) var smallTexture: texture_external;
-    @group(0) @binding(2) var<uniform> mousePosition: MouseUniform;
+    @group(0) @binding(2) var<uniform> spritePosition: SpriteUniform;
     @group(0) @binding(3) var<uniform> constants: Constants;
     @group(0) @binding(4) var maskTexture: texture_external;
 
@@ -66,10 +68,10 @@ const maskShaderCode = /* wgsl */`
     fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
         let halfCursorWidth = constants.cursorWidth / constants.screenWidth / 2.0;
         let halfCursorHeight = constants.cursorHeight / constants.screenHeight / 2.0;
-        let leftBoundary = mousePosition.mousePosition.x -halfCursorWidth;
-        let rightBoundary = mousePosition.mousePosition.x + halfCursorWidth;
-        let bottomBoundary = mousePosition.mousePosition.y - halfCursorHeight;
-        let topBoundary = mousePosition.mousePosition.y + halfCursorHeight;
+        let leftBoundary = spritePosition.position.x -halfCursorWidth;
+        let rightBoundary = spritePosition.position.x + halfCursorWidth;
+        let bottomBoundary = spritePosition.position.y - halfCursorHeight;
+        let topBoundary = spritePosition.position.y + halfCursorHeight;
 
         let isWithinCursor = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
                             fragUV.y > bottomBoundary && fragUV.y < topBoundary;
@@ -89,7 +91,7 @@ const maskShaderCode = /* wgsl */`
                     return vec4<f32>(0.0, 0.0, 0.0, 0.0);
                 }
                 // if it's close to the center show it
-                var cursorCenter = vec2<f32>(mousePosition.mousePosition.x * 2.0, mousePosition.mousePosition.y);
+                var cursorCenter = vec2<f32>(spritePosition.position.x * 2.0, spritePosition.position.y);
                 var adjustedFragUV = vec2<f32>(fragUV.x * 2.0 , fragUV.y );
                 var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
                 var thresholdDistance = 0.05;
@@ -110,65 +112,81 @@ const maskShaderCode = /* wgsl */`
 
 // pixels of the cursor when there is no mask applied
 const noMaskShaderCode = /* wgsl */`
-    struct MouseUniform {
-    mousePosition: vec2<f32>
+    struct SpriteUniform {
+        position: vec2<f32>,
+        rotation: f32,
+        scale: vec2<f32>
     };
 
     struct CursorUniform {
-    useMask: u32
+        useMask: u32
     };
 
     struct Constants {
-    screenWidth: f32,
-    screenHeight: f32,
-    cursorWidth: f32,
-    cursorHeight: f32,
-    cursorActive: f32,
-    activeRadius: f32
+        screenWidth: f32,
+        screenHeight: f32,
+        cursorWidth: f32,
+        cursorHeight: f32,
+        cursorActive: f32,
+        activeRadius: f32
     };
 
     @group(0) @binding(0) var mySampler: sampler;
     @group(0) @binding(1) var smallTexture: texture_external;
-    @group(0) @binding(2) var<uniform> mousePosition: MouseUniform;
+    @group(0) @binding(2) var<uniform> spritePosition: SpriteUniform;
     @group(0) @binding(3) var<uniform> constants: Constants;
 
     @fragment
     fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
-    let halfCursorWidth = constants.cursorWidth / constants.screenWidth / 2.0;
-    let halfCursorHeight = constants.cursorHeight / constants.screenHeight / 2.0;
-    let leftBoundary = mousePosition.mousePosition.x - halfCursorWidth;
-    let rightBoundary = mousePosition.mousePosition.x + halfCursorWidth;
-    let bottomBoundary = mousePosition.mousePosition.y - halfCursorHeight;
-    let topBoundary = mousePosition.mousePosition.y + halfCursorHeight;
+        let halfCursorWidth = 0.5 * spritePosition.scale.x; //constants.cursorWidth / constants.screenWidth / 2.0 * spritePosition.scale.x;
+        let halfCursorHeight = 0.5 * spritePosition.scale.y; //constants.cursorHeight / constants.screenHeight / 2.0 * spritePosition.scale.y;
+    
+        // Calculate the center of the sprite
+        let center = spritePosition.position;
+    
+        // Rotate the fragment UV around the center based on the sprite's rotation
+        let cosRotation = cos(spritePosition.rotation);
+        let sinRotation = sin(spritePosition.rotation);
+        let rotatedUV = vec2<f32>(
+            cosRotation * (fragUV.x - center.x) + sinRotation * (fragUV.y - center.y) + center.x,
+            -sinRotation * (fragUV.x - center.x) + cosRotation * (fragUV.y - center.y) + center.y
+        );
+    
+        // Adjust boundaries for the rotated and scaled sprite
+        let leftBoundary = center.x - halfCursorWidth;
+        let rightBoundary = center.x + halfCursorWidth;
+        let bottomBoundary = center.y - halfCursorHeight;
+        let topBoundary = center.y + halfCursorHeight;
 
-    let isWithinCursor = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
-                        fragUV.y > bottomBoundary && fragUV.y < topBoundary;
+        
+        let isWithinCursor = rotatedUV.x > leftBoundary && rotatedUV.x < rightBoundary && 
+            rotatedUV.y > bottomBoundary && rotatedUV.y < topBoundary;
 
-    if (isWithinCursor) {
-        let uCoord = (fragUV.x - leftBoundary) / (2.0 * halfCursorWidth);
-        let vCoord = (fragUV.y - bottomBoundary) / (2.0 * halfCursorHeight);
-        let adjustedUV = vec2<f32>(uCoord, vCoord);
+        if (isWithinCursor) {
+            let uCoord = (rotatedUV.x - leftBoundary) / (2.0 * halfCursorWidth);
+            let vCoord = (rotatedUV.y - bottomBoundary) / (2.0 * halfCursorHeight);
+            let adjustedUV = vec2<f32>(uCoord, vCoord);
 
-        let colorFromSmallTexture = textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
-        if (colorFromSmallTexture.a < 1.0) {
-            // if it's close to the center show itl
-            var cursorCenter = vec2<f32>(mousePosition.mousePosition.x * 2.0, mousePosition.mousePosition.y);
-            var adjustedFragUV = vec2<f32>(fragUV.x * 2.0 , fragUV.y );
-            var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
-            var thresholdDistance = 0.05;
-            if (distanceFromCenter <= thresholdDistance) {
-                var bias = 0.9; // Adjust as needed to bias more or less in favor of smallTexture
-                var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
-                var beta = 1.0 - alpha; // Inverse alpha value for blending
-                // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 
-                var blendedColor = alpha * colorFromSmallTexture;
-                return blendedColor;
+            let colorFromSmallTexture = textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
+            if (colorFromSmallTexture.a < 1.0) {
+                // if it's close to the center show itl
+                var cursorCenter = vec2<f32>(spritePosition.position.x * 2.0, spritePosition.position.y);
+                var adjustedFragUV = vec2<f32>(rotatedUV.x * 2.0 , rotatedUV.y );
+                var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
+                var thresholdDistance = 0.05;
+                if (distanceFromCenter <= thresholdDistance) {
+                    var bias = 0.9; // Adjust as needed to bias more or less in favor of smallTexture
+                    var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
+                    var beta = 1.0 - alpha; // Inverse alpha value for blending
+                    // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 
+                    var blendedColor = alpha * colorFromSmallTexture;
+                    return blendedColor;
+                }
             }
+            return textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
         }
-        return textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
-    }
-
-    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        // If the pixel is not within the cursor, return transparent
+        return vec4<f32>(1.0, 0.0, 0.0, 0.0);
     }
 `;
 
@@ -176,11 +194,12 @@ const noMaskShaderCode = /* wgsl */`
 // the default video player, only it takes in mouse coords so it can render to 
 // the right x,y position
 class CursorNoMaskShaderBehavior extends ShaderBehavior {
-    constructor(videoPlayers) {
+    constructor(videoPlayers, positionBuffer) {
         super(videoPlayers);
         this._pipeline = null; // Cache for the pipeline
         this._vertexBindGroup = null; // cache for the vertex bind group
         this._bindGroupLayout = null; // cache for the bind group layout
+        this.positionBuffer = positionBuffer;
     }
 
     getPipeline(webgpu) {
@@ -259,7 +278,7 @@ class CursorNoMaskShaderBehavior extends ShaderBehavior {
             entries: [
                 { binding: 0, resource: webgpu.sampler },
                 { binding: 1, resource: cursorExternalTexture },
-                { binding: 2, resource: { buffer: webgpu.mousePositionBuffer } },
+                { binding: 2, resource: { buffer: this.positionBuffer } },
                 { binding: 3, resource: { buffer: webgpu.constants } }
             ]
         });
@@ -371,7 +390,7 @@ class CursorMaskShaderBehavior extends ShaderBehavior {
                 entries: [
                     { binding: 0, resource: webgpu.sampler },
                     { binding: 1, resource: cursorExternalTexture },
-                    { binding: 2, resource: { buffer: webgpu.mousePositionBuffer } },
+                    { binding: 2, resource: { buffer: this.positionBuffer } },
                     { binding: 3, resource: { buffer: webgpu.constants } },
                     { binding: 4, resource: maskExternalTexture }
                 ]

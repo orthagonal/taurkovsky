@@ -376,8 +376,16 @@ struct AnchorPoints {
   // weights: vec4<f32> // weight of each anchor point
 }
 
+struct CircleParams {
+  center: vec2<f32>,
+  radius: f32,
+  color: vec4<f32>, 
+}
+
+
 @group(1) @binding(0) var<uniform> vertexConstants: VertexConstants;
 @group(1) @binding(1) var<uniform> anchors: AnchorPoints;
+// @group(1) @binding(2) var<uniform> circle: CircleParams; // Add uniforms for the circle
 
 @vertex
 fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
@@ -408,9 +416,15 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 
     // Directly use the closest anchor's offset, clamp between -1 and 1:
     pos[vertexIndex] = anchors.points[closestAnchorIndex].xy * 2.00 - 1.0;
-    // pos[vertexIndex].x = clamp(pos[vertexIndex].x, -1.0, 1.0);
-    // pos[vertexIndex].y = clamp(pos[vertexIndex].y, -1.0, 1.0);
-
+    const numSegments = 32u; // You can adjust for smoothness
+    let angleIncrement = 2.0 * 3.14 / f32(numSegments); 
+    let angle = angleIncrement * f32(vertexIndex);
+  
+    // let offsetX = circle.radius * cos(angle);
+    // let offsetY = circle.radius * sin(angle);
+  
+    // pos[vertexIndex] += vec2<f32>(circle.center.x + offsetX, circle.center.y + offsetY); 
+  
     var randomDisplacement = vec2<f32>(
         vertexConstants.shudderAmount * (sin(vertexConstants.time * 25.0) - 0.5), 
         vertexConstants.shudderAmount * (cos(vertexConstants.time * 30.0) - 0.5)
@@ -468,6 +482,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
             0.5
           ]);
           this.anchorBuffer = null;
+          this.circleParamsBuffer = null;
           this.anchorWeights = new Float32Array(8).fill(1);
         }
         resetWeights() {
@@ -489,6 +504,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
               entries: [
                 { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } },
                 { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } }
+                // { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }
               ]
             });
             this._vertexBindGroup = webgpu.device.createBindGroup({
@@ -496,6 +512,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
               entries: [
                 { binding: 0, resource: { buffer: webgpu.vertexConstants } },
                 { binding: 1, resource: { buffer: this.anchorBuffer } }
+                // { binding: 2, resource: { buffer: this.circleParamsBuffer } }
               ]
             });
             this._pipeline = webgpu.device.createRenderPipeline({
@@ -558,6 +575,13 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         }
         renderBindGroup(textureList, renderPassEncoder, webgpu, anchors) {
           this.updateAnchorBuffer(webgpu, anchors);
+          const circleCenter = new Float32Array([0.5, 1]);
+          const circleRadius = 0.05;
+          const circleColor = new Float32Array([1, 0, 0, 1]);
+          webgpu.circleParamsBuffer = webgpu.device.createBuffer({
+            size: 24,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+          });
           const mainExternalTexture = textureList[0];
           const bindGroup = webgpu.device.createBindGroup({
             layout: this.getBindGroupLayout(webgpu),
@@ -574,7 +598,6 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
           renderPassEncoder.draw(4, 1, 0, 0);
         }
       };
-      alert("update");
     }
   });
 
@@ -614,8 +637,10 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 `;
       maskShaderCode = /* wgsl */
       `
-    struct MouseUniform {
-        mousePosition: vec2<f32>
+    struct SpriteUniform {
+        position: vec2<f32>,
+        rotation: f32,
+        scale: vec2<f32>
     };
 
     struct CursorUniform {
@@ -633,7 +658,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 
     @group(0) @binding(0) var mySampler: sampler;
     @group(0) @binding(1) var smallTexture: texture_external;
-    @group(0) @binding(2) var<uniform> mousePosition: MouseUniform;
+    @group(0) @binding(2) var<uniform> spritePosition: SpriteUniform;
     @group(0) @binding(3) var<uniform> constants: Constants;
     @group(0) @binding(4) var maskTexture: texture_external;
 
@@ -641,10 +666,10 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
     fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
         let halfCursorWidth = constants.cursorWidth / constants.screenWidth / 2.0;
         let halfCursorHeight = constants.cursorHeight / constants.screenHeight / 2.0;
-        let leftBoundary = mousePosition.mousePosition.x -halfCursorWidth;
-        let rightBoundary = mousePosition.mousePosition.x + halfCursorWidth;
-        let bottomBoundary = mousePosition.mousePosition.y - halfCursorHeight;
-        let topBoundary = mousePosition.mousePosition.y + halfCursorHeight;
+        let leftBoundary = spritePosition.position.x -halfCursorWidth;
+        let rightBoundary = spritePosition.position.x + halfCursorWidth;
+        let bottomBoundary = spritePosition.position.y - halfCursorHeight;
+        let topBoundary = spritePosition.position.y + halfCursorHeight;
 
         let isWithinCursor = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
                             fragUV.y > bottomBoundary && fragUV.y < topBoundary;
@@ -664,7 +689,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
                     return vec4<f32>(0.0, 0.0, 0.0, 0.0);
                 }
                 // if it's close to the center show it
-                var cursorCenter = vec2<f32>(mousePosition.mousePosition.x * 2.0, mousePosition.mousePosition.y);
+                var cursorCenter = vec2<f32>(spritePosition.position.x * 2.0, spritePosition.position.y);
                 var adjustedFragUV = vec2<f32>(fragUV.x * 2.0 , fragUV.y );
                 var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
                 var thresholdDistance = 0.05;
@@ -684,73 +709,90 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 `;
       noMaskShaderCode = /* wgsl */
       `
-    struct MouseUniform {
-    mousePosition: vec2<f32>
+    struct SpriteUniform {
+        position: vec2<f32>,
+        rotation: f32,
+        scale: vec2<f32>
     };
 
     struct CursorUniform {
-    useMask: u32
+        useMask: u32
     };
 
     struct Constants {
-    screenWidth: f32,
-    screenHeight: f32,
-    cursorWidth: f32,
-    cursorHeight: f32,
-    cursorActive: f32,
-    activeRadius: f32
+        screenWidth: f32,
+        screenHeight: f32,
+        cursorWidth: f32,
+        cursorHeight: f32,
+        cursorActive: f32,
+        activeRadius: f32
     };
 
     @group(0) @binding(0) var mySampler: sampler;
     @group(0) @binding(1) var smallTexture: texture_external;
-    @group(0) @binding(2) var<uniform> mousePosition: MouseUniform;
+    @group(0) @binding(2) var<uniform> spritePosition: SpriteUniform;
     @group(0) @binding(3) var<uniform> constants: Constants;
 
     @fragment
     fn main(@location(0) fragUV : vec2<f32>) -> @location(0) vec4<f32> {
-    let halfCursorWidth = constants.cursorWidth / constants.screenWidth / 2.0;
-    let halfCursorHeight = constants.cursorHeight / constants.screenHeight / 2.0;
-    let leftBoundary = mousePosition.mousePosition.x - halfCursorWidth;
-    let rightBoundary = mousePosition.mousePosition.x + halfCursorWidth;
-    let bottomBoundary = mousePosition.mousePosition.y - halfCursorHeight;
-    let topBoundary = mousePosition.mousePosition.y + halfCursorHeight;
+        let halfCursorWidth = 0.5 * spritePosition.scale.x; //constants.cursorWidth / constants.screenWidth / 2.0 * spritePosition.scale.x;
+        let halfCursorHeight = 0.5 * spritePosition.scale.y; //constants.cursorHeight / constants.screenHeight / 2.0 * spritePosition.scale.y;
+    
+        // Calculate the center of the sprite
+        let center = spritePosition.position;
+    
+        // Rotate the fragment UV around the center based on the sprite's rotation
+        let cosRotation = cos(spritePosition.rotation);
+        let sinRotation = sin(spritePosition.rotation);
+        let rotatedUV = vec2<f32>(
+            cosRotation * (fragUV.x - center.x) + sinRotation * (fragUV.y - center.y) + center.x,
+            -sinRotation * (fragUV.x - center.x) + cosRotation * (fragUV.y - center.y) + center.y
+        );
+    
+        // Adjust boundaries for the rotated and scaled sprite
+        let leftBoundary = center.x - halfCursorWidth;
+        let rightBoundary = center.x + halfCursorWidth;
+        let bottomBoundary = center.y - halfCursorHeight;
+        let topBoundary = center.y + halfCursorHeight;
 
-    let isWithinCursor = fragUV.x > leftBoundary && fragUV.x < rightBoundary && 
-                        fragUV.y > bottomBoundary && fragUV.y < topBoundary;
+        
+        let isWithinCursor = rotatedUV.x > leftBoundary && rotatedUV.x < rightBoundary && 
+            rotatedUV.y > bottomBoundary && rotatedUV.y < topBoundary;
 
-    if (isWithinCursor) {
-        let uCoord = (fragUV.x - leftBoundary) / (2.0 * halfCursorWidth);
-        let vCoord = (fragUV.y - bottomBoundary) / (2.0 * halfCursorHeight);
-        let adjustedUV = vec2<f32>(uCoord, vCoord);
+        if (isWithinCursor) {
+            let uCoord = (rotatedUV.x - leftBoundary) / (2.0 * halfCursorWidth);
+            let vCoord = (rotatedUV.y - bottomBoundary) / (2.0 * halfCursorHeight);
+            let adjustedUV = vec2<f32>(uCoord, vCoord);
 
-        let colorFromSmallTexture = textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
-        if (colorFromSmallTexture.a < 1.0) {
-            // if it's close to the center show itl
-            var cursorCenter = vec2<f32>(mousePosition.mousePosition.x * 2.0, mousePosition.mousePosition.y);
-            var adjustedFragUV = vec2<f32>(fragUV.x * 2.0 , fragUV.y );
-            var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
-            var thresholdDistance = 0.05;
-            if (distanceFromCenter <= thresholdDistance) {
-                var bias = 0.9; // Adjust as needed to bias more or less in favor of smallTexture
-                var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
-                var beta = 1.0 - alpha; // Inverse alpha value for blending
-                // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 
-                var blendedColor = alpha * colorFromSmallTexture;
-                return blendedColor;
+            let colorFromSmallTexture = textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
+            if (colorFromSmallTexture.a < 1.0) {
+                // if it's close to the center show itl
+                var cursorCenter = vec2<f32>(spritePosition.position.x * 2.0, spritePosition.position.y);
+                var adjustedFragUV = vec2<f32>(rotatedUV.x * 2.0 , rotatedUV.y );
+                var distanceFromCenter = distance(adjustedFragUV, cursorCenter);
+                var thresholdDistance = 0.05;
+                if (distanceFromCenter <= thresholdDistance) {
+                    var bias = 0.9; // Adjust as needed to bias more or less in favor of smallTexture
+                    var alpha = clamp(colorFromSmallTexture.a + bias, 0.0, 1.0); // Clamp to ensure it's between 0 and 1
+                    var beta = 1.0 - alpha; // Inverse alpha value for blending
+                    // alpha 1 = only colorFromSmallTexture, alpha = 0, only colorFromMaskTexture 
+                    var blendedColor = alpha * colorFromSmallTexture;
+                    return blendedColor;
+                }
             }
+            return textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
         }
-        return textureSampleBaseClampToEdge(smallTexture, mySampler, adjustedUV);
-    }
-
-    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        // If the pixel is not within the cursor, return transparent
+        return vec4<f32>(1.0, 0.0, 0.0, 0.0);
     }
 `;
       CursorNoMaskShaderBehavior = class extends ShaderBehavior {
-        constructor(videoPlayers) {
+        constructor(videoPlayers, positionBuffer) {
           super(videoPlayers);
           this._pipeline = null;
           this._vertexBindGroup = null;
           this._bindGroupLayout = null;
+          this.positionBuffer = positionBuffer;
         }
         getPipeline(webgpu) {
           if (!this._pipeline) {
@@ -822,7 +864,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
             entries: [
               { binding: 0, resource: webgpu.sampler },
               { binding: 1, resource: cursorExternalTexture },
-              { binding: 2, resource: { buffer: webgpu.mousePositionBuffer } },
+              { binding: 2, resource: { buffer: this.positionBuffer } },
               { binding: 3, resource: { buffer: webgpu.constants } }
             ]
           });
@@ -918,7 +960,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
               entries: [
                 { binding: 0, resource: webgpu.sampler },
                 { binding: 1, resource: cursorExternalTexture },
-                { binding: 2, resource: { buffer: webgpu.mousePositionBuffer } },
+                { binding: 2, resource: { buffer: this.positionBuffer } },
                 { binding: 3, resource: { buffer: webgpu.constants } },
                 { binding: 4, resource: maskExternalTexture }
               ]
@@ -1086,10 +1128,16 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
     if (moduleState2.playgraphState === "blank") {
       const currentUserInput = moduleState2.mainUserInputQueue.shift() || "";
       if (currentUserInput === "s") {
-        moduleState2.playgraphState = "s";
-        return playgraph2.s["6"].graph[0];
+        if (moduleState2.playgraphState === "blank") {
+          moduleState2.playgraphState = "to_s";
+          return playgraph2.s.blank.sink.sink;
+        }
       }
       return "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm";
+    }
+    if (moduleState2.playgraphState === "to_s") {
+      moduleState2.playgraphState = "s";
+      return playgraph2.s["344"].graph[0];
     }
     if (moduleState2.playgraphState === "s") {
       const currentUserInput = moduleState2.mainUserInputQueue.shift() || "";
@@ -1123,6 +1171,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
       }
       const lastLetter = currentVideo.key.split("_to_")[1].split("-")[0];
       const prevLetter = currentVideo.key.split("_to_")[0].replace("see-", "");
+      console.log("prevLetter", prevLetter, "lastLetter", lastLetter);
       const destination = getNextPlaygraphNodeNoReversals(playgraph2.se, prevLetter, lastLetter);
       return destination;
     }
@@ -1159,117 +1208,230 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   var require_intro_playgraphs = __commonJS({
     "src/trailer/game1/intro_playgraphs.js"(exports, module) {
       var eyePlaygraph = {
-        see: {
-          "200": {
+        s: {
+          "347": {
             "graph": [
-              "game1/clips/see-200_to_188-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-200_to_178-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-200_to_168-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "game1/clips/seetest-347_to_346-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-347_to_345-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-347_to_344-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-347_to_343-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {
-              "lamp-sink": "game1/clips/see-200_to_lamp-sink487f7b22f68312d2c1bbc93b1aea445b.webm"
+              seetest2: "game1/clips/seetest-347_to_682-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             }
           },
-          "188": {
+          "346": {
             "graph": [
-              "game1/clips/see-188_to_200-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-188_to_178-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-188_to_168-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "game1/clips/seetest-346_to_347-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-346_to_345-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-346_to_344-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-346_to_343-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
-          "178": {
+          "345": {
             "graph": [
-              "game1/clips/see-178_to_200-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-178_to_188-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-178_to_168-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "game1/clips/seetest-345_to_347-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-345_to_346-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-345_to_344-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-345_to_343-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
-          "168": {
+          "344": {
             "graph": [
-              "game1/clips/see-168_to_200-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-168_to_188-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-168_to_178-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "game1/clips/seetest-344_to_347-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-344_to_346-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-344_to_345-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-344_to_343-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
+          },
+          "343": {
+            "graph": [
+              "game1/clips/seetest-343_to_347-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-343_to_346-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-343_to_345-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-343_to_344-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
+          },
+          "blank": {
+            "graph": [],
+            "sink": {
+              "sink": "game1/clips/blank_to_s-sink487f7b22f68312d2c1bbc93b1aea445b.webm"
+            }
           }
         },
         se: {
-          "79": {
+          "686": {
             "graph": [
-              "game1/clips/see-79_to_73-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-79_to_67-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-79_to_62-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "game1/clips/seetest-686_to_685-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-686_to_684-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-686_to_683-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-686_to_682-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
-          "73": {
+          "685": {
             "graph": [
-              "game1/clips/see-73_to_79-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-73_to_67-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-73_to_62-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "game1/clips/seetest-685_to_686-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-685_to_684-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-685_to_683-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-685_to_682-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
-          "67": {
+          "684": {
             "graph": [
-              "game1/clips/see-67_to_79-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-67_to_73-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-67_to_62-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "game1/clips/seetest-684_to_686-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-684_to_685-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-684_to_683-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-684_to_682-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
-          "62": {
+          "683": {
             "graph": [
-              "game1/clips/see-62_to_79-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-62_to_73-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-62_to_67-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "game1/clips/seetest-683_to_686-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-683_to_685-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-683_to_684-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-683_to_682-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
-            "sink": {
-              "168-sink": "game1/clips/see-62_to_168-sink487f7b22f68312d2c1bbc93b1aea445b.webm"
-            }
+            "sink": {}
+          },
+          "682": {
+            "graph": [
+              "game1/clips/seetest-682_to_686-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-682_to_685-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-682_to_684-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/seetest-682_to_683-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
           }
         },
-        s: {
-          "21": {
+        see: {
+          "1035": {
             "graph": [
-              "game1/clips/see-21_to_17-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-21_to_10-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-21_to_6-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "game1/clips/see-1035_to_1034-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-1035_to_1033-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-1035_to_1032-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
+          },
+          "1034": {
+            "graph": [
+              "game1/clips/see-1034_to_1035-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-1034_to_1033-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-1034_to_1032-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
+          },
+          "1033": {
+            "graph": [
+              "game1/clips/see-1033_to_1035-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-1033_to_1034-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-1033_to_1032-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
+          },
+          "1032": {
+            "graph": [
+              "game1/clips/see-1032_to_1035-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-1032_to_1034-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/see-1032_to_1033-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
+          }
+        },
+        se2: {
+          "708": {
+            "graph": [
+              "game1/clips/se-708_to_707-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/se-708_to_706-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/se-708_to_705-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {
-              "62-sink": "game1/clips/see-21_to_62-sink487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "sink": "game1/clips/see-708_to_1032-sink487f7b22f68312d2c1bbc93b1aea445b.webm"
             }
           },
-          "17": {
+          "707": {
             "graph": [
-              "game1/clips/see-17_to_21-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-17_to_10-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-17_to_6-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "game1/clips/se-707_to_708-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/se-707_to_706-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/se-707_to_705-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
-          "10": {
+          "706": {
             "graph": [
-              "game1/clips/see-10_to_21-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-10_to_17-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-10_to_6-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "game1/clips/se-706_to_708-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/se-706_to_707-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/se-706_to_705-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
-          "6": {
+          "705": {
             "graph": [
-              "game1/clips/see-6_to_21-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-6_to_17-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
-              "game1/clips/see-6_to_10-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "game1/clips/se-705_to_708-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/se-705_to_707-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/se-705_to_706-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
+          }
+        },
+        s2: {
+          "355": {
+            "graph": [
+              "game1/clips/s-355_to_354-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-355_to_353-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-355_to_352-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-355_to_351-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {
+              "sink": "game1/clips/see-355_to_705-sink487f7b22f68312d2c1bbc93b1aea445b.webm"
+            }
+          },
+          "354": {
+            "graph": [
+              "game1/clips/s-354_to_355-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-354_to_353-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-354_to_352-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-354_to_351-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
             ],
             "sink": {}
           },
-          "see": {
+          "353": {
+            "graph": [
+              "game1/clips/s-353_to_355-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-353_to_354-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-353_to_352-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-353_to_351-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
+          },
+          "352": {
+            "graph": [
+              "game1/clips/s-352_to_355-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-352_to_354-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-352_to_353-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-352_to_351-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
+          },
+          "351": {
+            "graph": [
+              "game1/clips/s-351_to_355-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-351_to_354-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-351_to_353-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+              "game1/clips/s-351_to_352-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+            ],
+            "sink": {}
+          },
+          "blank": {
             "graph": [],
             "sink": {
-              "intro-sink": "game1/clips/see_intro-sink487f7b22f68312d2c1bbc93b1aea445b.webm"
+              "sink": "game1/clips/blank_to_s-sink487f7b22f68312d2c1bbc93b1aea445b.webm"
             }
           }
         },
@@ -1319,6 +1481,95 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
     }
   });
 
+  // src/trailer/game1/narrationStateHandlers.js
+  var require_narrationStateHandlers = __commonJS({
+    "src/trailer/game1/narrationStateHandlers.js"(exports, module) {
+      var narrationPlaygraph = {
+        blank: "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm",
+        see_intro: {
+          // plays one time at the very ver beginning
+          first_one: "game1/clips/narration_intro_see-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+          // plays randomly after the first one
+          flashes: [
+            "game1/clips/narration_or_did_they_see_me-graph487f7b22f68312d2c1bbc93b1aea445b.webm",
+            "game1/clips/narration_did_i_see_them-graph487f7b22f68312d2c1bbc93b1aea445b.webm"
+          ]
+        }
+      };
+      function narrationVideoSwitcher(currentVideo, moduleState2, playgraph2) {
+        if (moduleState2.scene === "see_intro") {
+          return see_intro2(currentVideo, moduleState2, narrationPlaygraph.see_intro);
+        }
+      }
+      var see_intro2 = (currentVideo, moduleState2, playgraph2) => {
+        if (moduleState2.playgraphState === "blank") {
+          if (moduleState2.narrationState === "blank") {
+            moduleState2.showSlots = false;
+            moduleState2.narrationState = "intro_playing";
+            return playgraph2.first_one;
+          }
+          if (moduleState2.narrationState === "intro_playing") {
+            moduleState2.narrationState = "intro_played";
+            const previousOnEnded = currentVideo.onended;
+            currentVideo.onended = () => {
+              moduleState2.showSlots = true;
+              currentVideo.onended = previousOnEnded;
+              previousOnEnded();
+            };
+            return narrationPlaygraph.blank;
+          }
+        }
+        return narrationPlaygraph.blank;
+      };
+      module.exports = { narrationVideoSwitcher, narrationPlaygraph };
+    }
+  });
+
+  // src/trailer/game1/wordStateHandlers.js
+  var require_wordStateHandlers = __commonJS({
+    "src/trailer/game1/wordStateHandlers.js"(exports, module) {
+      var wordPlaygraph = {
+        blank: "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm",
+        see: {
+          blank: "main/blank487f7b22f68312d2c1bbc93b1aea445b.webm",
+          s: {
+            // plays one time at the very ver beginning
+            blank_to_blue_s: "game1/clips/blank_to_blue_s487f7b22f68312d2c1bbc93b1aea445b.webm",
+            blue_s: "game1/clips/blue_s487f7b22f68312d2c1bbc93b1aea445b.webm",
+            blue_s_infinite: "game1/clips/blue_s_infinite487f7b22f68312d2c1bbc93b1aea445b.webm"
+          }
+        }
+      };
+      function firstLetterVideoSwitcher(currentVideo, moduleState2, playgraph2) {
+        if (moduleState2.scene === "see_intro") {
+          return word_see(currentVideo, moduleState2, wordPlaygraph.see);
+        }
+      }
+      var word_see = (currentVideo, moduleState2, playgraph2) => {
+        if (moduleState2.keyboardInput.cumulativeUserString === "") {
+          return playgraph2.blank;
+        }
+        if (moduleState2.keyboardInput.cumulativeUserString === "s") {
+          playgraph2 = playgraph2.s;
+          if (moduleState2.wordState.currentLetterHasBeenDisplayed) {
+            if (moduleState2.wordState.playingForward) {
+              moduleState2.wordState.playingForward = false;
+              return playgraph2.blue_s_infinite;
+            }
+            moduleState2.wordState.playingForward = true;
+            return playgraph2.blue_s;
+          }
+          moduleState2.wordState.currentLetterHasBeenDisplayed = true;
+          return playgraph2.blank_to_blue_s;
+        }
+      };
+      module.exports = {
+        firstLetterVideoSwitcher,
+        wordPlaygraph
+      };
+    }
+  });
+
   // src/trailer/game1/module.js
   var require_module = __commonJS({
     "src/trailer/game1/module.js"(exports, module) {
@@ -1327,10 +1578,15 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
       init_VideoPlayer();
       init_ShaderBehavior();
       init_SpellCursor();
+      init_SpellCursorBehaviors();
       init_DistortionShaderBehavior();
       init_stateHandlers();
       var import_intro_playgraphs = __toESM(require_intro_playgraphs());
-      var webmPaths = extractWebmPathsFromObject(import_intro_playgraphs.default);
+      var import_narrationStateHandlers = __toESM(require_narrationStateHandlers());
+      var import_wordStateHandlers = __toESM(require_wordStateHandlers());
+      var mainWebmPaths = extractWebmPathsFromObject(import_intro_playgraphs.default);
+      var narrationWebmPaths = extractWebmPathsFromObject(import_narrationStateHandlers.narrationPlaygraph);
+      var wordWebmPaths = extractWebmPathsFromObject(import_wordStateHandlers.wordPlaygraph);
       var canvas2;
       var isLetterAnimating = false;
       var textFlashAnimationDuration = 100;
@@ -1342,7 +1598,9 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
       var device2;
       var mousePositionBuffer2;
       var mainBehavior;
+      var narrationBehavior;
       moduleState = {
+        gpuDefinitions: null,
         started: false,
         // the current 'scene' and playgraph we are in 
         scene: "intro",
@@ -1351,25 +1609,62 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         // effectively how fast things are happening
         // current state of the module, correspondds to a clique or highly-connected sub-graph in the playgraph
         playgraphState: "blank",
+        narrationState: "blank",
+        wordState: {
+          // position xy, rotation, (not used),  scale xy, two zeros for gpu padding
+          letterPositions: [
+            [0.5, 0.15, 0.2, 0.85, 0.25, 0.25, 1, 1]
+          ],
+          currentLetterHasBeenDisplayed: false
+        },
         mainUserInputQueue: [""],
         cursorUserInputQueue: [""],
+        showSlots: false,
         distortionAnchors: {},
+        keyboardInput: {
+          cumulativeUserString: "",
+          expectedUserString: "see",
+          nextExpectedChar: "s",
+          charMatches: false,
+          charMismatchToHandle: false
+        },
+        keywordLength: 3,
         // cumulative string the user has typed
-        userString: ""
+        String: ""
       };
       function mainNextVideoStrategy(currentVideo) {
         distortAnchors2();
         return mainVideoSwitcher(currentVideo, moduleState, import_intro_playgraphs.default);
       }
-      function updateTextAndCursor() {
+      function narrationNextVideoStrategy(currentVideo) {
+        return (0, import_narrationStateHandlers.narrationVideoSwitcher)(currentVideo, moduleState, import_intro_playgraphs.default);
+      }
+      function updateDOM() {
         return new Promise((resolve, reject) => {
           const textContainer = document.getElementById("textContainer");
           const latestLetterContainer = document.getElementById("latestLetterContainer");
-          textContainer.style.left = `${mouseXNormalized * 100}%`;
-          textContainer.style.top = `${20 + mouseYNormalized * 100}%`;
+          if (moduleState.keyboardInput.charMismatchToHandle) {
+            latestLetterContainer.textContent = moduleState.keyboardInput.charMismatchToHandle;
+            moduleState.keyboardInput.charMismatchToHandle = false;
+            latestLetterContainer.style.color = "red";
+            const xMark = document.createElement("span");
+            xMark.textContent = "X";
+            xMark.style.color = "red";
+            xMark.style.fontWeight = "bold";
+            latestLetterContainer.appendChild(xMark);
+            setTimeout(() => {
+              latestLetterContainer.classList.add("fade-out");
+              latestLetterContainer.addEventListener("transitionend", () => {
+                latestLetterContainer.textContent = "";
+                latestLetterContainer.classList.remove("fade-out");
+                moduleState.keyboardInput.charMismatchToHandle = false;
+              });
+            }, 1e3);
+          }
           if (!cursorVariables2.cursorActive) {
-            if (moduleState.userString !== previousString) {
-              const lastChar = moduleState.userString.charAt(moduleState.userString.length - 1);
+            if (moduleState.keyboardInput.cumulativeUserString !== previousString) {
+              latestLetterContainer.style.color = "white";
+              const lastChar = moduleState.keyboardInput.cumulativeUserString.charAt(moduleState.keyboardInput.cumulativeUserString.length - 1);
               latestLetterContainer.textContent = lastChar;
               latestLetterContainer.style.left = `${mouseXNormalized * 100}%`;
               latestLetterContainer.style.top = `${mouseYNormalized * 100}%`;
@@ -1380,9 +1675,9 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
               setTimeout(() => {
                 latestLetterContainer.textContent = "";
               }, 1e3);
-              previousString = moduleState.userString;
+              previousString = moduleState.keyboardInput.cumulativeUserString;
             }
-            textContainer.textContent = moduleState.userString;
+            textContainer.textContent = moduleState.keyboardInput.cumulativeUserString;
             textContainer.style.color = "white";
             if (wordCompleted) {
               textContainer.classList.add("flash-animation");
@@ -1392,10 +1687,11 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
               wordCompleted = false;
             }
           } else {
-            moduleState.userString = "";
+            moduleState.keyboardInput.cumulativeUserString = "";
             textContainer.textContent = "";
             latestLetterContainer.textContent = "";
           }
+          textContainer.textContent = "";
           resolve();
         });
       }
@@ -1438,7 +1734,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
           const yCanvasRelative = event.clientY - rect.top;
           mouseXNormalized = xCanvasRelative / canvas2.width;
           mouseYNormalized = yCanvasRelative / canvas2.height;
-          const mousePositionArray = new Float32Array([mouseXNormalized, mouseYNormalized]);
+          const mousePositionArray = new Float32Array([mouseXNormalized, mouseYNormalized, 1, 0]);
           device2.queue.writeBuffer(
             mousePositionBuffer2,
             0,
@@ -1487,10 +1783,35 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         mousePositionBuffer2 = gpuDefinitions.mousePositionBuffer;
         device2 = gpuDefinitions.device;
         canvas2 = gpuDefinitions.canvas;
-        const videoPlayer = new VideoPlayer_default(webmPaths, mainNextVideoStrategy, false);
-        mainBehavior = new DistortionShaderBehavior([videoPlayer]);
+        firstLetterPositionBuffer = device2.createBuffer({
+          size: 32,
+          // padded out to at least 32 bytes  
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+        const firstLetterPositionArray = new Float32Array(moduleState.wordState.letterPositions[0]);
+        device2.queue.writeBuffer(
+          firstLetterPositionBuffer,
+          0,
+          firstLetterPositionArray.buffer
+        );
+        moduleState.gpuDefinitions = gpuDefinitions;
+        const mainVideoPlayer = new VideoPlayer_default(mainWebmPaths, mainNextVideoStrategy, false);
+        mainBehavior = new DistortionShaderBehavior([mainVideoPlayer]);
+        const narrationVideoPlayer = new VideoPlayer_default(narrationWebmPaths, narrationNextVideoStrategy, false);
+        narrationBehavior = new DistortionShaderBehavior([narrationVideoPlayer]);
+        const firstLetterVideoPlayer = new VideoPlayer_default(wordWebmPaths, (currentVideo) => (0, import_wordStateHandlers.firstLetterVideoSwitcher)(currentVideo, moduleState, import_wordStateHandlers.wordPlaygraph), false);
+        const firstLetterShader = new CursorNoMaskShaderBehavior([firstLetterVideoPlayer], firstLetterPositionBuffer);
+        const mainInteractiveVideo = new InteractiveVideo_default(gpuDefinitions, mainVideoPlayer, mainBehavior);
+        const narrationInteractiveVideo = new InteractiveVideo_default(gpuDefinitions, narrationVideoPlayer, narrationBehavior);
+        const firstLetterInteractiveVideo = new InteractiveVideo_default(gpuDefinitions, firstLetterVideoPlayer, firstLetterShader);
+        window2.interactiveVideos = [mainInteractiveVideo, narrationInteractiveVideo, firstLetterInteractiveVideo];
+        window2.mainInteractiveVideo = mainInteractiveVideo;
+        const circleElement = document.querySelector(".draggable-circle");
+        const overlayContainer = document.querySelector("body");
+        const webgpuCanvas = document.getElementById("webgpuCanvas");
+        circleElement.addEventListener("mousedown", (event) => {
+        });
         moduleState.distortionAnchors.currentAnchors = mainBehavior.currentAnchors;
-        window2.mainInteractiveVideo = new InteractiveVideo_default(gpuDefinitions, videoPlayer, mainBehavior);
         const cursorVocabulary = {
           "_masks": [
             "main/stretch2_3l_idle_mask.webm",
@@ -1556,9 +1877,12 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         window2.spellCursor.currentNodeIndex = 0;
         renderLoop2();
         await new Promise((r) => setTimeout(r, 200));
-        await window2.mainInteractiveVideo.start("main/blank487f7b22f68312d2c1bbc93b1aea445b.webm");
+        await mainInteractiveVideo.start("main/blank487f7b22f68312d2c1bbc93b1aea445b.webm");
+        await narrationInteractiveVideo.start("main/blank487f7b22f68312d2c1bbc93b1aea445b.webm");
+        await firstLetterInteractiveVideo.start("main/blank487f7b22f68312d2c1bbc93b1aea445b.webm");
       }
       function distortAnchors2() {
+        mainBehavior.updateAnchorBuffer(moduleState.gpuDefinitions, moduleState.distortionAnchors.currentAnchors);
         if (moduleState.resetAnchors) {
           moduleState.resetAnchors = false;
           mainBehavior.resetWeights();
@@ -1576,17 +1900,29 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         }
         if (moduleState.playgraphState === "see") {
           if (event.key === "ArrowRight") {
-            moduleState.playgraphState = "see_to_lamp";
+            moduleState.distortionAnchors.currentAnchors[8] += 0.01;
           }
+        }
+        if (event.key === "ArrowLeft") {
+          moduleState.showSlots = !moduleState.showSlots;
         }
         if (event.key === "Backspace" || event.key === "Escape") {
           window2.spellCursor.cursorState = "blank";
-          moduleState.userString = "";
+          moduleState.keyboardInput.cumulativeUserString = "";
           moduleState.cursorUserInputQueue = [];
         } else if (/^[a-zA-Z]$/.test(event.key)) {
-          moduleState.userString += event.key.toLowerCase();
-          moduleState.cursorUserInputQueue.push(moduleState.userString);
-          moduleState.mainUserInputQueue.push(moduleState.userString);
+          const inputChar = event.key.toLowerCase();
+          const keyboardInput = moduleState.keyboardInput;
+          if (keyboardInput.expectedUserString && inputChar === keyboardInput.nextExpectedChar) {
+            keyboardInput.cumulativeUserString += inputChar;
+            keyboardInput.nextExpectedChar = keyboardInput.expectedUserString[keyboardInput.cumulativeUserString.length];
+            moduleState.cursorUserInputQueue.push(keyboardInput.cumulativeUserString);
+            moduleState.mainUserInputQueue.push(keyboardInput.cumulativeUserString);
+            keyboardInput.charMatches = true;
+          } else {
+            keyboardInput.charMatches = false;
+            keyboardInput.charMismatchToHandle = inputChar;
+          }
           isLetterAnimating = true;
           setTimeout(() => {
             isLetterAnimating = false;
@@ -1597,7 +1933,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
         start,
         mainNextVideoStrategy,
         handleEvent,
-        updateTextAndCursor
+        updateDOM
       };
     }
   });
@@ -1682,8 +2018,8 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
     canvas.style.height = `${window.innerHeight}px`;
     context = canvas.getContext("webgpu", { alpha: true });
     mousePositionBuffer = device.createBuffer({
-      size: 8,
-      // 2 float32 values: x and y
+      size: 32,
+      // must be at least 32 to accomdate padding
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
     vertexConstantsBuffer = device.createBuffer({
@@ -1737,14 +2073,8 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
     };
     const commandEncoder = device.createCommandEncoder();
     const renderPassEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-    if (!window.mainInteractiveVideo.blocked) {
-      window.mainInteractiveVideo.renderFrame(renderPassEncoder);
-      if (window.spellCursor) {
-        window.spellCursor.renderFrame(renderPassEncoder);
-      }
-      if (window.hitboxShader) {
-        window.hitboxShader.renderFrame(renderPassEncoder);
-      }
+    for (let i = 0; i < window.interactiveVideos.length; i++) {
+      window.interactiveVideos[i].renderFrame(renderPassEncoder);
     }
     renderPassEncoder.end();
     device.queue.submit([commandEncoder.finish()]);
@@ -1752,7 +2082,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   async function renderLoop() {
     renderLoopCount++;
     updateFPS();
-    currentGame.updateTextAndCursor();
+    currentGame.updateDOM();
     const currentTime = performance.now();
     const elapsedTime = (currentTime - startTime) / 1e3;
     device.queue.writeBuffer(
@@ -1795,5 +2125,7 @@ fn main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
       currentGame.handleEvent(window, "keyup", event);
     });
     document.addEventListener("click", playOnInteraction);
+    setTimeout(() => {
+    }, 4e3);
   };
 })();

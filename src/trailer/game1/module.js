@@ -3,17 +3,26 @@ import InteractiveVideo from '../InteractiveVideo.js';
 import VideoPlayer from '../VideoPlayer.js';
 import { DefaultShaderBehavior } from '../ShaderBehavior.js';
 import SpellCursor from './SpellCursor.js';
+import { CursorNoMaskShaderBehavior } from './SpellCursorBehaviors.js';
 import { DistortionShaderBehavior } from '../DistortionShaderBehavior.js';
+// import { MultiTextureShaderBehavior } from '../MultitextureBehavior.js';
 import { mainVideoSwitcher } from './stateHandlers.js';
 import playgraph from './intro_playgraphs.js';
+import { narrationVideoSwitcher, narrationPlaygraph } from './narrationStateHandlers.js';
+
+import { firstLetterVideoSwitcher, wordPlaygraph } from './wordStateHandlers.js';
+
+
 // get all videos from playgraph object:
-const webmPaths = extractWebmPathsFromObject(playgraph);
-// will be passed in via start
+const mainWebmPaths = extractWebmPathsFromObject(playgraph);
+const narrationWebmPaths = extractWebmPathsFromObject(narrationPlaygraph);
+const wordWebmPaths = extractWebmPathsFromObject(wordPlaygraph);
+
 let canvas;
 let isLetterAnimating = false;
 const textFlashAnimationDuration = 100;  // 500ms or 0.5 seconds
 let previousString = "";
-let wordCompleted = false; 
+let wordCompleted = false;
 let mouseXNormalized;
 let mouseYNormalized;
 let cursorVariables = false;
@@ -21,22 +30,42 @@ let device;
 let context;
 let mousePositionBuffer;
 let mainBehavior;
+let narrationBehavior;
+
 
 
 moduleState = {
+  gpuDefinitions: null,
   started: false,
   // the current 'scene' and playgraph we are in 
   scene: 'intro',
-  time:  0,
+  time: 0,
   timeIncrement: 0.02, // effectively how fast things are happening
   // current state of the module, correspondds to a clique or highly-connected sub-graph in the playgraph
   playgraphState: 'blank',
+  narrationState: 'blank',
+  wordState: {
+    // position xy, rotation, (not used),  scale xy, two zeros for gpu padding
+    letterPositions: [
+      [ 0.5, 0.15, 0.0, 0.85, 0.25, 0.25, 1.0, 1.0 ]
+    ],
+    currentLetterHasBeenDisplayed: false
+  },
   mainUserInputQueue: [""],
   cursorUserInputQueue: [""],
+  showSlots: false,
   distortionAnchors: {
   },
+  keyboardInput: {
+    cumulativeUserString: "",
+    expectedUserString: "see",
+    nextExpectedChar: "s",
+    charMatches: false,
+    charMismatchToHandle: false,
+  },
+  keywordLength: 3,
   // cumulative string the user has typed
-  userString: "",
+  String: "",
 };
 
 
@@ -46,19 +75,49 @@ function mainNextVideoStrategy(currentVideo) {
   return mainVideoSwitcher(currentVideo, moduleState, playgraph);
 }
 
+function narrationNextVideoStrategy(currentVideo) {
+  return narrationVideoSwitcher(currentVideo, moduleState, playgraph);
+}
+
 // the main DOM operations loop
-function updateTextAndCursor() {
+function updateDOM() {
   return new Promise((resolve, reject) => {
-    // console.time('dom_render');
     const textContainer = document.getElementById('textContainer');
     const latestLetterContainer = document.getElementById('latestLetterContainer');
-    textContainer.style.left = `${mouseXNormalized * 100}%`;
-    textContainer.style.top = `${20 + mouseYNormalized * 100}%`;
+    if (moduleState.keyboardInput.charMismatchToHandle) {
+      latestLetterContainer.textContent = moduleState.keyboardInput.charMismatchToHandle;
+      moduleState.keyboardInput.charMismatchToHandle = false;
+      latestLetterContainer.style.color = "red";
+      const xMark = document.createElement('span');
+      xMark.textContent = 'X';
+      xMark.style.color = "red";
+      xMark.style.fontWeight = "bold";
+      latestLetterContainer.appendChild(xMark);
+      setTimeout(() => {
+        latestLetterContainer.classList.add('fade-out');
+        latestLetterContainer.addEventListener('transitionend', () => {
+          latestLetterContainer.textContent = '';
+          latestLetterContainer.classList.remove('fade-out');
+          moduleState.keyboardInput.charMismatchToHandle = false; // Ready for next mismatch
+        });
+      }, 1000);
+      // const rejectSound = new Audio('path/to/your/reject.mp3');
+      // rejectSound.play();
+    }
+    // Handle word display slots, turned off for now 
+    // const keywordSlotsContainer = document.getElementById('keywordSlots');
+    // keywordSlotsContainer.innerHTML = ''; 
+    // if (moduleState.showSlots) {
+    //   keywordSlotsContainer.classList.add('fade-in'); 
+    // } else {
+    // keywordSlotsContainer.classList.remove('fade-in');
+    // keywordSlotsContainer.classList.add('fade-out');
+    // }
     if (!cursorVariables.cursorActive) {
-      if (moduleState.userString !== previousString) {
-        const lastChar = moduleState.userString.charAt(moduleState.userString.length - 1);
+      if (moduleState.keyboardInput.cumulativeUserString !== previousString) {
+        latestLetterContainer.style.color = 'white';
+        const lastChar = moduleState.keyboardInput.cumulativeUserString.charAt(moduleState.keyboardInput.cumulativeUserString.length - 1);
         latestLetterContainer.textContent = lastChar;
-
         // Set position based on mouseXNormalized and mouseYNormalized
         // Assuming these values are in percentage (0-100), you might need to adjust this calculation
         latestLetterContainer.style.left = `${mouseXNormalized * 100}%`;
@@ -74,10 +133,10 @@ function updateTextAndCursor() {
           latestLetterContainer.textContent = "";
         }, 1000); // 500ms (effect duration) + 500ms (additional delay) = 1000ms or 1 second
 
-        previousString = moduleState.userString;
+        previousString = moduleState.keyboardInput.cumulativeUserString;
       }
 
-      textContainer.textContent = moduleState.userString;
+      textContainer.textContent = moduleState.keyboardInput.cumulativeUserString;
       textContainer.style.color = 'white';
 
       if (wordCompleted) {
@@ -90,10 +149,13 @@ function updateTextAndCursor() {
       }
 
     } else {
-      moduleState.userString = "";
+      moduleState.keyboardInput.cumulativeUserString = "";
       textContainer.textContent = "";
       latestLetterContainer.textContent = ""; // Clear the latest letter when cursor is active
     }
+    // Clear textContainer
+    textContainer.textContent = "";
+
     // console.timeEnd('dom_render');
     resolve();
   });
@@ -153,7 +215,7 @@ const defaultCursorEventHandlers = {
     mouseYNormalized = yCanvasRelative / canvas.height;
 
     // Update the buffer
-    const mousePositionArray = new Float32Array([mouseXNormalized, mouseYNormalized]);
+    const mousePositionArray = new Float32Array([mouseXNormalized, mouseYNormalized, 1.0, 0.0]);
     device.queue.writeBuffer(
       mousePositionBuffer,
       0,
@@ -202,20 +264,71 @@ const defaultCursorEventHandlers = {
   }
 };
 
+// the main place where the game starts
 async function start(window, gpuDefinitions, renderLoop) {
+  // get all the webgpu definitions
   const { context, linearSampler, hitboxBGL, cursorConstants, vertexConstantsBuffer } = gpuDefinitions;
-  // define a few things in global here
   cursorVariables = gpuDefinitions.cursorVariables;
   mousePositionBuffer = gpuDefinitions.mousePositionBuffer;
   device = gpuDefinitions.device;
   canvas = gpuDefinitions.canvas;
 
-  const videoPlayer = new VideoPlayer(webmPaths, mainNextVideoStrategy, false);
-  // const mainBehavior = new DefaultShaderBehavior([videoPlayer]);
-  mainBehavior = new DistortionShaderBehavior([videoPlayer]);
+  firstLetterPositionBuffer = device.createBuffer({
+    size: 32,  // padded out to at least 32 bytes  
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+
+  const firstLetterPositionArray = new Float32Array(moduleState.wordState.letterPositions[0]);
+  device.queue.writeBuffer(
+    firstLetterPositionBuffer,
+    0,
+    firstLetterPositionArray.buffer
+  );
+
+  moduleState.gpuDefinitions = gpuDefinitions;
+  // set up all the shaders and their corresponding video players:
+  // main video player
+  const mainVideoPlayer = new VideoPlayer(mainWebmPaths, mainNextVideoStrategy, false);
+  mainBehavior = new DistortionShaderBehavior([mainVideoPlayer]);
+  // mostly plays audio and subtitle tracks over the main video
+  const narrationVideoPlayer = new VideoPlayer(narrationWebmPaths, narrationNextVideoStrategy, false);
+  narrationBehavior = new DistortionShaderBehavior([narrationVideoPlayer]);
+
+  // layer that shows the letters / words the user is typing
+  const firstLetterVideoPlayer = new VideoPlayer(wordWebmPaths, (currentVideo) => firstLetterVideoSwitcher(currentVideo, moduleState, wordPlaygraph), false);
+  const firstLetterShader = new CursorNoMaskShaderBehavior([firstLetterVideoPlayer], firstLetterPositionBuffer);
+
+  const mainInteractiveVideo = new InteractiveVideo(gpuDefinitions, mainVideoPlayer, mainBehavior);
+  const narrationInteractiveVideo = new InteractiveVideo(gpuDefinitions, narrationVideoPlayer, narrationBehavior);
+  const firstLetterInteractiveVideo = new InteractiveVideo(gpuDefinitions, firstLetterVideoPlayer, firstLetterShader);
+  // wordBehavior = new MultiTextureShaderBehavior([wordVideoPlayer], moduleState.letterPositions);
+  // const firstLetterInteractiveVideo = new InteractiveVideo(gpuDefinitions, wordVideoPlayer, wordBehavior);
+  // const wordInteractiveVideo = new InteractiveVideo(gpuDefinitions, wordVideoPlayer, wordBehavior);
+  // const hitboxShader = new HitboxShaderBehavior(gpuDefinitions, window.spellCursor);
+
+  window.interactiveVideos = [mainInteractiveVideo, narrationInteractiveVideo, firstLetterInteractiveVideo];
+  window.mainInteractiveVideo = mainInteractiveVideo;
+  const circleElement = document.querySelector('.draggable-circle');
+  const overlayContainer = document.querySelector('body');//.overlay-container');
+  const webgpuCanvas = document.getElementById('webgpuCanvas');
+
+  circleElement.addEventListener('mousedown', (event) => {
+    // // Calculate normalized coordinates of click on the circle (relative to the video/canvas)
+    // const rect = overlayContainer.getBoundingClientRect();
+    // const rawX = event.clientX - rect.left;
+    // const rawY = event.clientY - rect.top;
+
+    // const normalizedX = (rawX / overlayContainer.width) * 2.0 - 1.0; 
+    // const normalizedY = -((rawY / overlayContainer.height) * 2.0 - 1.0);
+
+    // const topCenterAnchorIndex = 8; // Assuming this is the correct index in currentAnchors 
+    // mainBehavior.currentAnchors[topCenterAnchorIndex ] = 0.90;
+    // mainBehavior.currentAnchors[topCenterAnchorIndex + 1] = normalizedY;
+    // console.log('normalizedX', normalizedX, 'normalizedY', normalizedY);
+  });
+
+
   moduleState.distortionAnchors.currentAnchors = mainBehavior.currentAnchors;
-  window.mainInteractiveVideo = new InteractiveVideo(gpuDefinitions, videoPlayer, mainBehavior);
-  // window.hitboxShader = new HitboxShaderBehavior(gpuDefinitions, window.spellCursor);
 
   const cursorVocabulary = {
     "_masks": [
@@ -223,41 +336,50 @@ async function start(window, gpuDefinitions, renderLoop) {
       "main/stretch1_3look_idle_mask.webm",
     ],
     "blank": {
-      "blank": { 
-        entry: "main/blank.webm", 
-        idle: "main/blank.webm", 
-        next: "blank" 
+      "blank": {
+        entry: "main/blank.webm",
+        idle: "main/blank.webm",
+        next: "blank"
       },
     },
     "open": {
-      "o": { 
-        entry: "main/o2.webm", 
-        idle: "main/o2_idle.webm", next: "op" },
-      "op": { 
-        entry: "main/op4.webm", 
-        idle: "main/op_idle.webm", next: "ope" },
-      "ope": { 
-        entry: "main/ope4.webm", 
-        idle: "main/ope5_idle.webm", next: "open" },
-      "open": { 
-        entry: "main/open_4.webm", 
-        idle: "main/open_idle.webm", next: "open" },
+      "o": {
+        entry: "main/o2.webm",
+        idle: "main/o2_idle.webm", next: "op"
+      },
+      "op": {
+        entry: "main/op4.webm",
+        idle: "main/op_idle.webm", next: "ope"
+      },
+      "ope": {
+        entry: "main/ope4.webm",
+        idle: "main/ope5_idle.webm", next: "open"
+      },
+      "open": {
+        entry: "main/open_4.webm",
+        idle: "main/open_idle.webm", next: "open"
+      },
     },
     "look": {
-      "l": { entry: 
-        "main/3l.webm", 
-        idle: "main/stretch2_3l_idle.webm", next: "lo" },
-      "lo": { 
-        entry: "main/3lo.webm", 
-        idle: "main/stretch_3lo_idle.webm", next: "loo" },
-      "loo": { 
-        entry: "main/3loo.webm", 
-        idle: "main/3loo_idle.webm", next: "look" },
-      "look": { 
-        entry: "main/3look.webm", 
+      "l": {
+        entry:
+          "main/3l.webm",
+        idle: "main/stretch2_3l_idle.webm", next: "lo"
+      },
+      "lo": {
+        entry: "main/3lo.webm",
+        idle: "main/stretch_3lo_idle.webm", next: "loo"
+      },
+      "loo": {
+        entry: "main/3loo.webm",
+        idle: "main/3loo_idle.webm", next: "look"
+      },
+      "look": {
+        entry: "main/3look.webm",
         idle:
-        
-        "main/stretch1_3look_idle.webm", next: "look" },
+
+          "main/stretch1_3look_idle.webm", next: "look"
+      },
     }
   };
   const cursorPlan = {
@@ -269,11 +391,14 @@ async function start(window, gpuDefinitions, renderLoop) {
   window.spellCursor.currentNodeIndex = 0;
   renderLoop();
   await new Promise(r => setTimeout(r, 200));
-  await window.mainInteractiveVideo.start('main/blank.webm');
+  await mainInteractiveVideo.start('main/blank.webm');
+  await narrationInteractiveVideo.start('main/blank.webm');
+  await firstLetterInteractiveVideo.start('main/blank.webm');
   // await window.spellCursor.start('main/blank.webm');
 }
 
 function distortAnchors() {
+  mainBehavior.updateAnchorBuffer(moduleState.gpuDefinitions, moduleState.distortionAnchors.currentAnchors);
   if (moduleState.resetAnchors) {
     moduleState.resetAnchors = false;
     mainBehavior.resetWeights();
@@ -294,18 +419,34 @@ const handleEvent = (window, eventName, event) => {
   if (moduleState.playgraphState === 'see') {
     // need to reset anchors to default
     if (event.key === "ArrowRight") {
-      moduleState.playgraphState = 'see_to_lamp';
+      moduleState.distortionAnchors.currentAnchors[8] += 0.01;
+      // moduleState.distortionAnchors.currentAnchors[8] += 0.01;
+      // moduleState.playgraphState = 'see_to_lamp';
     }
+  }
+  if (event.key === 'ArrowLeft') {
+    moduleState.showSlots = !moduleState.showSlots;
   }
   if (event.key === "Backspace" || event.key === "Escape") {
     window.spellCursor.cursorState = "blank";
-    moduleState.userString = "";
+    moduleState.keyboardInput.cumulativeUserString = "";
     moduleState.cursorUserInputQueue = [];  // Clear the queue
   } else if (/^[a-zA-Z]$/.test(event.key)) {
-    // For other input conditions
-    moduleState.userString += event.key.toLowerCase();
-    moduleState.cursorUserInputQueue.push(moduleState.userString);
-    moduleState.mainUserInputQueue.push(moduleState.userString);
+    // handler for any alphabet key
+    const inputChar = event.key.toLowerCase();
+    const keyboardInput = moduleState.keyboardInput;
+    // Check if the input matches the next expected character
+    if (keyboardInput.expectedUserString && inputChar === keyboardInput.nextExpectedChar) {
+      keyboardInput.cumulativeUserString += inputChar;
+      keyboardInput.nextExpectedChar = keyboardInput.expectedUserString[keyboardInput.cumulativeUserString.length];
+      // moduleState.keyboardInput.cumulativeUserString += event.key.toLowerCase();
+      moduleState.cursorUserInputQueue.push(keyboardInput.cumulativeUserString);
+      moduleState.mainUserInputQueue.push(keyboardInput.cumulativeUserString);
+      keyboardInput.charMatches = true;
+    } else {
+      keyboardInput.charMatches = false;
+      keyboardInput.charMismatchToHandle = inputChar;
+    }
     isLetterAnimating = true;  // Set the flag
     // Reset the flag after a delay (corresponding to the duration of the animation + the half-second delay)
     setTimeout(() => {
@@ -315,12 +456,9 @@ const handleEvent = (window, eventName, event) => {
 };
 
 
-
-
-
 module.exports = {
   start,
   mainNextVideoStrategy,
   handleEvent,
-  updateTextAndCursor,
+  updateDOM,
 };

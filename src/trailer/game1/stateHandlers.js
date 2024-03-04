@@ -74,10 +74,17 @@ function see_intro(currentVideo, moduleState, playgraph) {
   if (moduleState.playgraphState === 'blank') {
     const currentUserInput = moduleState.mainUserInputQueue.shift() || '';
     if (currentUserInput === 's') {
-      moduleState.playgraphState = 's';
-      return playgraph.s['6'].graph[0];
+      if (moduleState.playgraphState === 'blank') {
+        moduleState.playgraphState = 'to_s';
+        return playgraph.s.blank.sink.sink;
+      }
     }
     return 'main/blank.webm';
+  }
+  if (moduleState.playgraphState === 'to_s') {
+    moduleState.playgraphState = 's'; 
+    return playgraph.s['344'].graph[0];
+    // return playgraph.s['355'].graph[0];
   }
   // return a sink video if they type 'se' or just keep playing the same video
   if (moduleState.playgraphState === 's') {
@@ -115,6 +122,7 @@ function see_intro(currentVideo, moduleState, playgraph) {
     }
     const lastLetter = currentVideo.key.split('_to_')[1].split('-')[0];
     const prevLetter = currentVideo.key.split('_to_')[0].replace('see-', '');
+    console.log('prevLetter', prevLetter, 'lastLetter', lastLetter);
     const destination = getNextPlaygraphNodeNoReversals(playgraph.se, prevLetter, lastLetter);
     return destination;
   }
