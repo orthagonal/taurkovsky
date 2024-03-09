@@ -51,7 +51,7 @@ function mainVideoSwitcher(currentVideo, moduleState, playgraph) {
     return 'main/blank.webm';
   }
   if (moduleState.scene === 'see_intro') {
-    return see_intro(currentVideo, moduleState, playgraph.intro.eyePlaygraph);
+    return see_intro(currentVideo, moduleState, playgraph.intro.alternateEyePlaygraph);
   }
   // return nextVideoLantern(currentVideo);
 }
@@ -75,17 +75,18 @@ function see_intro(currentVideo, moduleState, playgraph) {
     const currentUserInput = moduleState.mainUserInputQueue.shift() || '';
     if (currentUserInput === 's') {
       if (moduleState.playgraphState === 'blank') {
-        moduleState.playgraphState = 'to_s';
+        // moduleState.playgraphState = 'to_s';
+        moduleState.playgraphState = 's';
         return playgraph.s.blank.sink.sink;
       }
     }
     return 'main/blank.webm';
   }
-  if (moduleState.playgraphState === 'to_s') {
-    moduleState.playgraphState = 's'; 
-    return playgraph.s['344'].graph[0];
-    // return playgraph.s['355'].graph[0];
-  }
+  // if (moduleState.playgraphState === 'to_s') {
+  //   moduleState.playgraphState = 's'; 
+  //   return playgraph.s['344'].graph[0];
+  //   // return playgraph.s['355'].graph[0];
+  // }
   // return a sink video if they type 'se' or just keep playing the same video
   if (moduleState.playgraphState === 's') {
     const currentUserInput = moduleState.mainUserInputQueue.shift() || '';
@@ -101,7 +102,7 @@ function see_intro(currentVideo, moduleState, playgraph) {
       moduleState.mainUserInputQueue.push(currentUserInput);
       return destination;
     }
-    const lastLetter = currentVideo.key.split('_to_')[1].split('-')[0];
+    const lastLetter = currentVideo.key.includes('sink') ? "6" : currentVideo.key.split('_to_')[1].split('-')[0];
     const destination = getNextPlaygraphNode(playgraph.s, lastLetter);
     return destination;
   }

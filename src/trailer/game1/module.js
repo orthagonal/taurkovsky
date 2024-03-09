@@ -10,7 +10,7 @@ import { mainVideoSwitcher } from './stateHandlers.js';
 import playgraph from './intro_playgraphs.js';
 import { narrationVideoSwitcher, narrationPlaygraph } from './narrationStateHandlers.js';
 
-import { firstLetterVideoSwitcher, wordPlaygraph } from './wordStateHandlers.js';
+import { firstLetterVideoSwitcher, secondLetterVideoSwitcher, thirdLetterVideoSwitcher, wordPlaygraph } from './wordStateHandlers.js';
 
 
 // get all videos from playgraph object:
@@ -33,23 +33,42 @@ let mainBehavior;
 let narrationBehavior;
 
 
+const adjustValue = (value, incrementRange, max, min) => {
+  const posOrNeg = Math.random() < 0.5 ? -1 : 1;
+  const incrementAmount = Math.random() * incrementRange * posOrNeg;
+  const newValue = value + incrementAmount;
+  if (newValue > max) {
+    return value;
+  }
+  if (newValue < min) {
+    return value;
+  }
+  return newValue;
+};
 
+
+// the one true underlying state of the game
+// video and DOM state are derived from this
 moduleState = {
   gpuDefinitions: null,
   started: false,
   // the current 'scene' and playgraph we are in 
   scene: 'intro',
   time: 0,
-  timeIncrement: 0.02, // effectively how fast things are happening
+  timeIncrement: 1, // effectively how fast things are happening
   // current state of the module, correspondds to a clique or highly-connected sub-graph in the playgraph
   playgraphState: 'blank',
   narrationState: 'blank',
   wordState: {
-    // position xy, rotation, (not used),  scale xy, two zeros for gpu padding
     letterPositions: [
-      [ 0.5, 0.15, 0.0, 0.85, 0.25, 0.25, 1.0, 1.0 ]
+      // position xy, rotation, (next digit is padding), scale xy, two more zeros for gpu padding
+      [0.5, 0.1, 0.0, 0.0, 0.25, 0.25, 1.0, 1.0],
+      [0.54, 0.1, 0.0, 0.0, 0.25, 0.25, 1.0, 1.0],
+      [0.59, 0.1, 0.0, 0.0, 0.25, 0.25, 1.0, 1.0],
     ],
-    currentLetterHasBeenDisplayed: false
+    currentLetterPlayingForward: [false, false, false],
+    introVideoHasBeenPlayed: [false, false, false],
+    letterIsVisible: [false, false, false],
   },
   mainUserInputQueue: [""],
   cursorUserInputQueue: [""],
@@ -80,7 +99,7 @@ function narrationNextVideoStrategy(currentVideo) {
 }
 
 // the main DOM operations loop
-function updateDOM() {
+function localUpdateDOM() {
   return new Promise((resolve, reject) => {
     const textContainer = document.getElementById('textContainer');
     const latestLetterContainer = document.getElementById('latestLetterContainer');
@@ -264,6 +283,9 @@ const defaultCursorEventHandlers = {
   }
 };
 
+const letterPositionBuffers = [];
+const letterPositionArrays = [];
+
 // the main place where the game starts
 async function start(window, gpuDefinitions, renderLoop) {
   // get all the webgpu definitions
@@ -272,19 +294,20 @@ async function start(window, gpuDefinitions, renderLoop) {
   mousePositionBuffer = gpuDefinitions.mousePositionBuffer;
   device = gpuDefinitions.device;
   canvas = gpuDefinitions.canvas;
-
-  firstLetterPositionBuffer = device.createBuffer({
-    size: 32,  // padded out to at least 32 bytes  
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-  });
-
-  const firstLetterPositionArray = new Float32Array(moduleState.wordState.letterPositions[0]);
-  device.queue.writeBuffer(
-    firstLetterPositionBuffer,
-    0,
-    firstLetterPositionArray.buffer
-  );
-
+  for (let i = 0; i < moduleState.wordState.letterPositions.length; i++) {
+    const buffer = device.createBuffer({
+      size: 32,  // Each buffer is padded out to at least 32 bytes
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    letterPositionBuffers.push(buffer);
+    letterPositionArrays.push(new Float32Array(moduleState.wordState.letterPositions[i]));
+    device.queue.writeBuffer(
+      buffer,
+      0,
+      letterPositionArrays[i].buffer
+    );
+  }
+  // this is the main update loop for the game, needs access to webgpu to do webgpu things
   moduleState.gpuDefinitions = gpuDefinitions;
   // set up all the shaders and their corresponding video players:
   // main video player
@@ -296,37 +319,30 @@ async function start(window, gpuDefinitions, renderLoop) {
 
   // layer that shows the letters / words the user is typing
   const firstLetterVideoPlayer = new VideoPlayer(wordWebmPaths, (currentVideo) => firstLetterVideoSwitcher(currentVideo, moduleState, wordPlaygraph), false);
-  const firstLetterShader = new CursorNoMaskShaderBehavior([firstLetterVideoPlayer], firstLetterPositionBuffer);
+  const firstLetterShader = new CursorNoMaskShaderBehavior([firstLetterVideoPlayer], letterPositionBuffers[0]);
+
+  const secondLetterVideoPlayer = new VideoPlayer(wordWebmPaths, (currentVideo) => secondLetterVideoSwitcher(currentVideo, moduleState, wordPlaygraph), false);
+  const secondLetterShader = new CursorNoMaskShaderBehavior([secondLetterVideoPlayer], letterPositionBuffers[1]);
+
+  const thirdLetterVideoPlayer = new VideoPlayer(wordWebmPaths, (currentVideo) => thirdLetterVideoSwitcher(currentVideo, moduleState, wordPlaygraph), false);
+  const thirdLetterShader = new CursorNoMaskShaderBehavior([thirdLetterVideoPlayer], letterPositionBuffers[2]);
 
   const mainInteractiveVideo = new InteractiveVideo(gpuDefinitions, mainVideoPlayer, mainBehavior);
   const narrationInteractiveVideo = new InteractiveVideo(gpuDefinitions, narrationVideoPlayer, narrationBehavior);
   const firstLetterInteractiveVideo = new InteractiveVideo(gpuDefinitions, firstLetterVideoPlayer, firstLetterShader);
+  const secondLetterInteractiveVideo = new InteractiveVideo(gpuDefinitions, secondLetterVideoPlayer, secondLetterShader);
+  const thirdLetterInteractiveVideo = new InteractiveVideo(gpuDefinitions, thirdLetterVideoPlayer, thirdLetterShader);
+
   // wordBehavior = new MultiTextureShaderBehavior([wordVideoPlayer], moduleState.letterPositions);
   // const firstLetterInteractiveVideo = new InteractiveVideo(gpuDefinitions, wordVideoPlayer, wordBehavior);
   // const wordInteractiveVideo = new InteractiveVideo(gpuDefinitions, wordVideoPlayer, wordBehavior);
   // const hitboxShader = new HitboxShaderBehavior(gpuDefinitions, window.spellCursor);
 
-  window.interactiveVideos = [mainInteractiveVideo, narrationInteractiveVideo, firstLetterInteractiveVideo];
+  window.interactiveVideos = [mainInteractiveVideo, narrationInteractiveVideo, firstLetterInteractiveVideo, secondLetterInteractiveVideo, thirdLetterInteractiveVideo];
   window.mainInteractiveVideo = mainInteractiveVideo;
   const circleElement = document.querySelector('.draggable-circle');
   const overlayContainer = document.querySelector('body');//.overlay-container');
   const webgpuCanvas = document.getElementById('webgpuCanvas');
-
-  circleElement.addEventListener('mousedown', (event) => {
-    // // Calculate normalized coordinates of click on the circle (relative to the video/canvas)
-    // const rect = overlayContainer.getBoundingClientRect();
-    // const rawX = event.clientX - rect.left;
-    // const rawY = event.clientY - rect.top;
-
-    // const normalizedX = (rawX / overlayContainer.width) * 2.0 - 1.0; 
-    // const normalizedY = -((rawY / overlayContainer.height) * 2.0 - 1.0);
-
-    // const topCenterAnchorIndex = 8; // Assuming this is the correct index in currentAnchors 
-    // mainBehavior.currentAnchors[topCenterAnchorIndex ] = 0.90;
-    // mainBehavior.currentAnchors[topCenterAnchorIndex + 1] = normalizedY;
-    // console.log('normalizedX', normalizedX, 'normalizedY', normalizedY);
-  });
-
 
   moduleState.distortionAnchors.currentAnchors = mainBehavior.currentAnchors;
 
@@ -394,7 +410,83 @@ async function start(window, gpuDefinitions, renderLoop) {
   await mainInteractiveVideo.start('main/blank.webm');
   await narrationInteractiveVideo.start('main/blank.webm');
   await firstLetterInteractiveVideo.start('main/blank.webm');
+  await secondLetterInteractiveVideo.start('main/blank.webm');
+  await thirdLetterInteractiveVideo.start('main/blank.webm');
   // await window.spellCursor.start('main/blank.webm');
+  // the game state updating function is returned to the main engine
+  return function () {
+    // letterPositionBuffers.forEach((buffer, i) => {
+    //   device.queue.writeBuffer(
+    //     buffer,
+    //     0,
+    //     new Float32Array(moduleState.wordState.letterPositions[i]).buffer
+    //   );
+    // });
+    updateLetterPositions();
+    localUpdateDOM();
+    moduleState.time += moduleState.timeIncrement;
+  };
+}
+
+
+function updateLetterPositions() { // Renamed for clarity
+  const maxDistance = 0.06; 
+  const minDistance = 0.02; // min distance each letter moves to the right of the previous letter
+  const driftSpeed = 0.0005;
+  const subsequentLetterDriftSpeed = 0.0000005
+  // const subsequentLetterDriftSpeedY = 0.000000 5
+
+  for (let letterIndex = 0; letterIndex < moduleState.wordState.letterPositions.length; letterIndex++) {
+    let x = moduleState.wordState.letterPositions[letterIndex][0];
+    let y = moduleState.wordState.letterPositions[letterIndex][1];
+
+    // calculate the new letter position differently based on whether it's the first or subsequent letter
+    if (letterIndex === 0) {
+      // initialize the first letter to a random position then 'drift' it on each update after that
+      if (moduleState.time === 0) {
+        x = Math.random() * 0.3; // Between 0 and 30% of the screen width from the left
+        y = Math.random() * 0.8 + 0.1; // Random vertical position (10% from top to 90% from top)
+      }
+      const driftDirection = Math.random() < 0.5 ? -1 : 1;
+      x += driftSpeed * driftDirection;
+
+      // Keep within bounds of left side
+      x = Math.max(0, Math.min(x, 0.1));
+
+      y += driftSpeed * driftDirection;
+      y = Math.max(0, Math.min(y, 0.9));
+    } else {
+
+      const anchorX = moduleState.wordState.letterPositions[letterIndex - 1][0];
+      const anchorY = moduleState.wordState.letterPositions[letterIndex - 1][1];
+
+      let driftDirection = Math.random() < 0.5 ? -1 : 1;
+      x += subsequentLetterDriftSpeed * driftDirection; 
+      x = Math.max(anchorX + minDistance, x);
+      x = Math.min(x, anchorX + maxDistance); // Right constraint
+
+      driftDirection = Math.random() < 0.5 ? -1 : 1;
+      y += subsequentLetterDriftSpeed * driftDirection;
+      y = Math.max(anchorY - minDistance, Math.min(y, anchorY + minDistance));
+      y = Math.min(y, anchorY + maxDistance);
+
+      const rotSpeed = 0.001;
+      const rotDirection = Math.random() < 0.5 ? -1 : 1;
+      moduleState.wordState.letterPositions[letterIndex][2] += rotSpeed * rotDirection;
+      moduleState.wordState.letterPositions[letterIndex][2] = Math.min(moduleState.wordState.letterPositions[letterIndex][2], 0.15);
+  
+    }
+
+    // Update letterPositions and the buffer with the new value
+    moduleState.wordState.letterPositions[letterIndex][0] = x;
+    moduleState.wordState.letterPositions[letterIndex][1] = y;
+
+    device.queue.writeBuffer(
+      letterPositionBuffers[letterIndex],
+      0,
+      new Float32Array(moduleState.wordState.letterPositions[letterIndex]).buffer
+    );
+  }
 }
 
 function distortAnchors() {
@@ -403,7 +495,7 @@ function distortAnchors() {
     moduleState.resetAnchors = false;
     mainBehavior.resetWeights();
   }
-  moduleState.time += moduleState.timeIncrement;
+  // moduleState += moduleState.timeIncrement;
 }
 
 // i need to make it so that only one place advances the game state
@@ -459,6 +551,5 @@ const handleEvent = (window, eventName, event) => {
 module.exports = {
   start,
   mainNextVideoStrategy,
-  handleEvent,
-  updateDOM,
+  handleEvent
 };

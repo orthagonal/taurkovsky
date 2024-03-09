@@ -73,7 +73,7 @@ class VideoPlayer {
     // Get the video element for a given path
     lookupVideo(path) {
         // path = path.startsWith('/') ? path : `/${path}`
-        return this.videoElements[path] || alert('VideoPlayer: no video element found for ' + path);
+        return this.videoElements[path || 'main/blank.webm'] || alert('VideoPlayer: no video element found for ' + path);
     }
 
     async switchVideo() {

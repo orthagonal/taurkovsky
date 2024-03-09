@@ -188,10 +188,14 @@ async function renderFrame() {
     // await scanHitboxPixels(commandEncoder);
 }
 
+// initiallize the game state does nothing, a
+// new update function will be returned by the current game module
+let updateGameState = () => { };
+
 async function renderLoop() {
     renderLoopCount++;
     updateFPS();
-    currentGame.updateDOM();
+    updateGameState();
     const currentTime = performance.now();
     const elapsedTime = (currentTime - startTime) / 1000.0;  // Convert to seconds
     // Update the uniform buffer with the new time value
@@ -338,7 +342,7 @@ async function playOnInteraction() {
         vertexConstants: vertexConstantsBuffer,
         mousePositionBuffer
     };
-    currentGame.start(window, gpuDefinitions, renderLoop);
+    updateGameState = await currentGame.start(window, gpuDefinitions, renderLoop);
 }
 
 function defaultNextVideoStrategy(currentVideo) {

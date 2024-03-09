@@ -307,10 +307,175 @@ const eyePlaygraph = {
   }
 }
 
+const alternateEyePlaygraph = {
+  see: {
+    "168": {
+      "graph": [
+        "game1/clips/see-168_to_178-graph.webm",
+        "game1/clips/see-168_to_188-graph.webm",
+        "game1/clips/see-168_to_200-graph.webm",
+        "game1/clips/see-168_to_178-graph.webm",
+        "game1/clips/see-168_to_188-graph.webm",
+        "game1/clips/see-168_to_200-graph.webm",
+        "game1/clips/see-168_to_200-graph.webm",
+        "game1/clips/see-168_to_188-graph.webm",
+        "game1/clips/see-168_to_178-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "178": {
+      "graph": [
+        "game1/clips/see-178_to_168-graph.webm",
+        "game1/clips/see-178_to_188-graph.webm",
+        "game1/clips/see-178_to_200-graph.webm",
+        "game1/clips/see-178_to_168-graph.webm",
+        "game1/clips/see-178_to_188-graph.webm",
+        "game1/clips/see-178_to_200-graph.webm",
+        "game1/clips/see-178_to_200-graph.webm",
+        "game1/clips/see-178_to_188-graph.webm",
+        "game1/clips/see-178_to_168-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "188": {
+      "graph": [
+        "game1/clips/see-188_to_168-graph.webm",
+        "game1/clips/see-188_to_178-graph.webm",
+        "game1/clips/see-188_to_200-graph.webm",
+        "game1/clips/see-188_to_168-graph.webm",
+        "game1/clips/see-188_to_178-graph.webm",
+        "game1/clips/see-188_to_200-graph.webm",
+        "game1/clips/see-188_to_200-graph.webm",
+        "game1/clips/see-188_to_178-graph.webm",
+        "game1/clips/see-188_to_168-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "200": {
+      "graph": [
+        "game1/clips/see-200_to_168-graph.webm",
+        "game1/clips/see-200_to_178-graph.webm",
+        "game1/clips/see-200_to_188-graph.webm",
+        "game1/clips/see-200_to_168-graph.webm",
+        "game1/clips/see-200_to_178-graph.webm",
+        "game1/clips/see-200_to_188-graph.webm",
+        "game1/clips/see-200_to_188-graph.webm",
+        "game1/clips/see-200_to_178-graph.webm",
+        "game1/clips/see-200_to_168-graph.webm"
+      ],
+      "sink": {
+        "lamp-sink": "game1/clips/see-200_to_lamp-sink.webm"
+      }
+    },
+  },
+  se: {
+    "79": {
+      "graph": [
+        "game1/clips/see-79_to_73-graph.webm",
+        "game1/clips/see-79_to_67-graph.webm",
+        "game1/clips/see-79_to_62-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "73": {
+      "graph": [
+        "game1/clips/see-73_to_79-graph.webm",
+        "game1/clips/see-73_to_67-graph.webm",
+        "game1/clips/see-73_to_62-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "67": {
+      "graph": [
+        "game1/clips/see-67_to_79-graph.webm",
+        "game1/clips/see-67_to_73-graph.webm",
+        "game1/clips/see-67_to_62-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "62": {
+      "graph": [
+        "game1/clips/see-62_to_79-graph.webm",
+        "game1/clips/see-62_to_73-graph.webm",
+        "game1/clips/see-62_to_67-graph.webm"
+      ],
+      "sink": {
+        "sink": "game1/clips/see-62_to_168-sink.webm"
+      }
+    },
+  },
+  s: {
+    "21": {
+      "graph": [
+        "game1/clips/see-21_to_17-graph.webm",
+        "game1/clips/see-21_to_10-graph.webm",
+        "game1/clips/see-21_to_6-graph.webm"
+      ],
+      "sink": {
+        "sink": "game1/clips/see-21_to_62-sink.webm"
+      }
+    },
+    "17": {
+      "graph": [
+        "game1/clips/see-17_to_21-graph.webm",
+        "game1/clips/see-17_to_10-graph.webm",
+        "game1/clips/see-17_to_6-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "10": {
+      "graph": [
+        "game1/clips/see-10_to_21-graph.webm",
+        "game1/clips/see-10_to_17-graph.webm",
+        "game1/clips/see-10_to_6-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "6": {
+      "graph": [
+        "game1/clips/see-6_to_21-graph.webm",
+        "game1/clips/see-6_to_17-graph.webm",
+        "game1/clips/see-6_to_10-graph.webm"
+      ],
+      "sink": {
+
+      }
+    },
+    "blank": {
+      "graph": [
+
+      ],
+      "sink": {
+        "sink": "game1/clips/see_intro-sink.webm"
+      }
+    }
+  },
+  
+};
+
+
+
 module.exports = {
   // export default {
   blank: 'main/blank.webm',
   intro: {
     eyePlaygraph,
+    alternateEyePlaygraph
   }
 }
