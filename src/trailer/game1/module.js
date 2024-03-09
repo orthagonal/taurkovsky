@@ -8,8 +8,8 @@ import { DistortionShaderBehavior } from '../DistortionShaderBehavior.js';
 // import { MultiTextureShaderBehavior } from '../MultitextureBehavior.js';
 import { mainVideoSwitcher } from './stateHandlers.js';
 import playgraph from './intro_playgraphs.js';
+import { sm } from 'jssm';
 import { narrationVideoSwitcher, narrationPlaygraph } from './narrationStateHandlers.js';
-
 import { firstLetterVideoSwitcher, secondLetterVideoSwitcher, thirdLetterVideoSwitcher, wordPlaygraph } from './wordStateHandlers.js';
 
 
@@ -47,9 +47,22 @@ const adjustValue = (value, incrementRange, max, min) => {
 };
 
 
+// const lamp_scene = sm`Lamp_Front_Idle -> Lamp_Front_Infinite -> Lamp_Front_Idle 'keyword_story' -> Lamp_Turn`;
+// const story_playgraph = sm`blank -> blank;  blank 's' -> s; s -> s_infinite s_infinite -> s; s 'st' -> st;`
+const keyword_see_fsm = sm`
+  blank -> blank; 
+  blank 's' -> s_intro;
+  s_intro 'proceed' => s;
+  s 'se' -> se_intro;
+  se_intro 'proceed' => se;
+  se 'see' -> see_intro;
+  see_intro 'proceed' => see;
+`;
+
 // the one true underlying state of the game
 // video and DOM state are derived from this
 moduleState = {
+  keyword_see_fsm,
   gpuDefinitions: null,
   started: false,
   // the current 'scene' and playgraph we are in 

@@ -462,7 +462,7 @@ const alternateEyePlaygraph = {
 
       ],
       "sink": {
-        "sink": "game1/clips/see_intro-sink.webm"
+        "sink": "game1/clips/see_intro-sink_to_6.webm"
       }
     }
   },

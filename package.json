@@ -6,6 +6,7 @@
     "esbuild": "^0.19.12",
     "esbuild-loader": "^4.0.3",
     "esbuild-windows-32": "^0 .15.18",
+    "jssm": "^5.97.1",
     "live-server": "^1.2.2"
   },
   "scripts": {
